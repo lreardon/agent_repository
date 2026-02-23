@@ -1,0 +1,177 @@
+variable "project_id" {
+  type = string
+}
+
+variable "region" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "image" {
+  type = string
+}
+
+variable "vpc_connector_id" {
+  type = string
+}
+
+variable "cloud_sql_connection" {
+  type = string
+}
+
+variable "db_password_secret_id" {
+  type = string
+}
+
+variable "signing_key_secret_id" {
+  type = string
+}
+
+variable "redis_host" {
+  type = string
+}
+
+variable "redis_port" {
+  type = number
+}
+
+variable "min_instances" {
+  type = number
+}
+
+variable "max_instances" {
+  type = number
+}
+
+# --------------------------------------------------------------------------
+# Cloud Run service
+# --------------------------------------------------------------------------
+resource "google_cloud_run_v2_service" "api" {
+  name     = "agent-registry-${var.environment}"
+  location = var.region
+
+  template {
+    scaling {
+      min_instance_count = var.min_instances
+      max_instance_count = var.max_instances
+    }
+
+    vpc_access {
+      connector = var.vpc_connector_id
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
+    containers {
+      image = var.image
+
+      ports {
+        container_port = 8000
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+      }
+
+      # --- Environment variables ---
+      env {
+        name  = "ENV"
+        value = var.environment
+      }
+
+      env {
+        name  = "REDIS_URL"
+        value = "redis://${var.redis_host}:${var.redis_port}/0"
+      }
+
+      env {
+        name  = "DB_HOST"
+        value = "/cloudsql/${var.cloud_sql_connection}"
+      }
+
+      env {
+        name  = "DB_NAME"
+        value = "agent_registry"
+      }
+
+      env {
+        name  = "DB_USER"
+        value = "api_user"
+      }
+
+      # --- Secrets mounted as env vars ---
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = var.db_password_secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "PLATFORM_SIGNING_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.signing_key_secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      startup_probe {
+        http_get {
+          path = "/health"
+        }
+        initial_delay_seconds = 5
+        period_seconds        = 5
+        failure_threshold     = 3
+      }
+
+      liveness_probe {
+        http_get {
+          path = "/health"
+        }
+        period_seconds = 30
+      }
+    }
+
+    # Cloud SQL proxy sidecar
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [var.cloud_sql_connection]
+      }
+    }
+  }
+
+  # Allow unauthenticated access (public API)
+  ingress = "INGRESS_TRAFFIC_ALL"
+}
+
+# --------------------------------------------------------------------------
+# IAM — allow public access
+# --------------------------------------------------------------------------
+resource "google_cloud_run_v2_service_iam_member" "public" {
+  name     = google_cloud_run_v2_service.api.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# --------------------------------------------------------------------------
+# Outputs
+# --------------------------------------------------------------------------
+output "url" {
+  value = google_cloud_run_v2_service.api.uri
+}
+
+output "service_name" {
+  value = google_cloud_run_v2_service.api.name
+}

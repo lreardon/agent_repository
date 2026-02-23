@@ -1,0 +1,13 @@
+# Terraform state (use remote backend, never commit)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Sensitive variable files
+*.auto.tfvars
+secret.tfvars
