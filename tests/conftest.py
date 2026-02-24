@@ -20,7 +20,7 @@ from app.utils.crypto import generate_keypair
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Create a fresh engine + tables per test, tear down after."""
-    test_engine = create_async_engine(settings.database_url)
+    test_engine = create_async_engine(settings.test_database_url)
 
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -47,7 +47,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """HTTP test client with overridden DB and Redis dependencies."""
-    test_engine = create_async_engine(settings.database_url)
+    test_engine = create_async_engine(settings.test_database_url)
     test_session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:

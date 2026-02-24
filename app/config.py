@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     env: str = "development"
     database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry"
+    test_database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry_test"
     redis_url: str = "redis://localhost:6379/0"
     platform_signing_key: str = "dev-signing-key-not-for-production"
     platform_fee_percent: Decimal = Decimal("0.025")
