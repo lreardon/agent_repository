@@ -34,6 +34,8 @@ import httpx
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
 
+from demo_wallet import deposit_usdc_or_fallback, has_wallet_config
+
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 
 # ─── Colors ───
@@ -306,14 +308,18 @@ def main() -> None:
     banner("Act 2: Marketplace — Listing & Discovery")
     # ═══════════════════════════════════════════════════════════════
 
-    step(3, "Bob gets his USDC deposit address")
-    data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
-    agent_says("Bob", YELLOW, f"My deposit address: {data['address']}")
-    agent_says("Bob", YELLOW, f"Network: {data['network']} | USDC: {data['usdc_contract'][:10]}...")
-    print(f"         {DIM}In production, Bob sends USDC on Base L2 to this address.")
-    print(f"         Credits appear after 12 block confirmations (~24s on Base).{RESET}")
-    print(f"         {DIM}(Using dev deposit for demo purposes){RESET}")
-    data = expect(bob.post(f"/agents/{bob.agent_id}/deposit", {"amount": "500.00"}), 200, "Bob deposit")
+    step(3, "Bob gets his USDC deposit address and funds his account")
+    addr_data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
+    agent_says("Bob", YELLOW, f"My deposit address: {addr_data['address']}")
+    agent_says("Bob", YELLOW, f"Network: {addr_data['network']} | USDC: {addr_data['usdc_contract'][:10]}...")
+
+    if has_wallet_config():
+        print(f"         {GREEN}Testnet wallet detected — sending real USDC on Base Sepolia!{RESET}")
+    else:
+        print(f"         {DIM}No DEMO_WALLET_PRIVATE_KEY set — using dev deposit.{RESET}")
+        print(f"         {DIM}Set DEMO_WALLET_PRIVATE_KEY in .env to send real testnet USDC.{RESET}")
+
+    data = deposit_usdc_or_fallback(bob, bob.agent_id, "500.00", addr_data["address"], addr_data["network"])
     agent_says("Bob", YELLOW, f"Balance: ${data['balance']}")
 
     step(4, "Alice creates a service listing")

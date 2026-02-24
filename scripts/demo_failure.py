@@ -28,6 +28,8 @@ import httpx
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
 
+from demo_wallet import deposit_usdc_or_fallback, has_wallet_config
+
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 
 # ─── Colors ───
@@ -281,11 +283,10 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"Registered: {bob.agent_id[:8]}...")
 
     step(2, "Bob funds his account and Alice creates a listing")
-    data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
-    agent_says("Bob", YELLOW, f"Deposit address: {data['address']} ({data['network']})")
-    print(f"         {DIM}(Using dev deposit for demo){RESET}")
-    expect(bob.post(f"/agents/{bob.agent_id}/deposit", {"amount": "500.00"}), 200, "Bob deposit")
-    agent_says("Bob", YELLOW, "Balance: $500.00")
+    addr_data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
+    agent_says("Bob", YELLOW, f"Deposit address: {addr_data['address']} ({addr_data['network']})")
+    data = deposit_usdc_or_fallback(bob, bob.agent_id, "500.00", addr_data["address"], addr_data["network"])
+    agent_says("Bob", YELLOW, f"Balance: ${data['balance']}")
 
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
         "skill_id": "pdf-extraction",
