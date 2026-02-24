@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest_asyncio
 import redis.asyncio as aioredis
+import sqlalchemy
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -103,8 +104,8 @@ def make_auth_headers(
     elif isinstance(body, bytes):
         body_bytes = body
     else:
-        # Match httpx's default JSON serialization (spaces after separators)
-        body_bytes = json.dumps(body).encode()
+        # Match httpx's default JSON serialization (no spaces, UTF-8 not escaped)
+        body_bytes = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode()
 
     timestamp = datetime.now(UTC).isoformat()
     signature = sign_request(private_key_hex, timestamp, method, path, body_bytes)
