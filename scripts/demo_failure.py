@@ -28,7 +28,7 @@ import httpx
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
 
-from demo_wallet import deposit_usdc_or_fallback, has_wallet_config
+from demo_wallet import deposit_usdc
 
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 
@@ -163,12 +163,12 @@ def main():
 
     print(f"CHECK 1 ✓ Valid structure: {len(records)} records")
 
-    # Check 2: Minimum count (need ≥400 for 80% yield from 500 pages)
-    if len(records) < 400:
-        errors.append(f"Only {len(records)} records (need ≥400 for 80% yield)")
-        print(f"CHECK 2 ✗ Record count: {len(records)} < 400")
+    # Check 2: Minimum count (need ≥40 for 80% yield from 50 pages)
+    if len(records) < 40:
+        errors.append(f"Only {len(records)} records (need ≥40 for 80% yield)")
+        print(f"CHECK 2 ✗ Record count: {len(records)} < 40")
     else:
-        print(f"CHECK 2 ✓ Record count: {len(records)} ≥ 400")
+        print(f"CHECK 2 ✓ Record count: {len(records)} ≥ 40")
 
     # Check 3: Required fields present
     missing_fields = 0
@@ -285,7 +285,7 @@ def main() -> None:
     step(2, "Bob funds his account and Alice creates a listing")
     addr_data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
     agent_says("Bob", YELLOW, f"Deposit address: {addr_data['address']} ({addr_data['network']})")
-    data = deposit_usdc_or_fallback(bob, bob.agent_id, "500.00", addr_data["address"], addr_data["network"])
+    data = deposit_usdc(bob, bob.agent_id, "5.00", addr_data["address"], addr_data["network"])
     agent_says("Bob", YELLOW, f"Balance: ${data['balance']}")
 
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
@@ -305,10 +305,10 @@ def main() -> None:
     data = expect(bob.post("/jobs", {
         "seller_agent_id": alice.agent_id,
         "listing_id": listing_id,
-        "max_budget": "25.00",
+        "max_budget": "2.50",
         "requirements": {
             "input_format": "pdf",
-            "volume_pages": 500,
+            "volume_pages": 50,
             "output_format": "json",
             "fields": ["owner_name", "property_address", "units"],
         },
@@ -323,8 +323,8 @@ def main() -> None:
         "max_rounds": 5,
     }), 201, "Job proposal")
     job_id = data["job_id"]
-    agent_says("Bob", YELLOW, f"Job proposed: {job_id[:8]}... | Budget: $25.00")
-    agent_says("Bob", YELLOW, "Acceptance: 6 automated checks (≥400 records, no nulls, no dupes, etc.)")
+    agent_says("Bob", YELLOW, f"Job proposed: {job_id[:8]}... | Budget: $2.50")
+    agent_says("Bob", YELLOW, "Acceptance: 6 automated checks (≥40 records, no nulls, no dupes, etc.)")
 
     step(4, "Alice accepts immediately (no counter)")
     data = expect(alice.post(f"/jobs/{job_id}/accept"), 200, "Alice accept")
@@ -348,7 +348,7 @@ def main() -> None:
 
     step(7, "Alice delivers GARBAGE output")
     print(f"         {RED}{BOLD}Alice cuts corners. Her output has multiple problems:{RESET}")
-    print(f"         {DIM}• Only 150 records (need ≥400 — 80% of 500 pages)")
+    print(f"         {DIM}• Only 150 records (need ≥40 — 80% of 50 pages)")
     print(f"         • 30 records missing 'owner_name' field entirely")
     print(f"         • 20 records have null/empty property_address")
     print(f"         • Some 'units' values are negative or zero")
@@ -469,7 +469,7 @@ def main() -> None:
     bob_bal = expect(bob.get(f"/agents/{bob.agent_id}/balance", signed=True), 200, "Bob balance")
 
     print(f"           {'─' * 42}")
-    print(f"           Bob deposited:        $500.00")
+    print(f"           Bob deposited:        $5.00")
     print(f"           Agreed price:         ${agreed_price}")
     print(f"           Escrow:               {RED}REFUNDED{RESET}")
     print(f"           {'─' * 42}")
@@ -529,7 +529,7 @@ def main() -> None:
 
     {CYAN}1.{RESET} Bob's verification script ran in a sandboxed container
     {CYAN}2.{RESET} 5 of 6 checks failed:
-       {RED}✗{RESET} Only 165 records (needed ≥400)
+       {RED}✗{RESET} Only 165 records (needed ≥40)
        {RED}✗{RESET} 30 records missing required fields
        {RED}✗{RESET} 20 null/empty values
        {RED}✗{RESET} 15 invalid unit counts (negative)

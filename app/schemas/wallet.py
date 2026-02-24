@@ -89,3 +89,26 @@ class AvailableBalanceResponse(BaseModel):
     balance: Decimal
     available_balance: Decimal
     pending_withdrawals: Decimal
+
+
+class DepositNotifyRequest(BaseModel):
+    tx_hash: str = Field(..., min_length=64, max_length=66)
+
+    @field_validator("tx_hash")
+    @classmethod
+    def validate_tx_hash(cls, v: str) -> str:
+        # Normalize: accept with or without 0x prefix
+        if not v.startswith("0x"):
+            v = f"0x{v}"
+        if not re.match(r"^0x[0-9a-fA-F]{64}$", v):
+            raise ValueError("Invalid transaction hash (expected 64 hex chars, optional 0x prefix)")
+        return v
+
+
+class DepositNotifyResponse(BaseModel):
+    deposit_tx_id: uuid.UUID
+    tx_hash: str
+    amount_usdc: Decimal
+    status: str
+    confirmations_required: int
+    message: str

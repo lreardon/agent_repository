@@ -1,10 +1,8 @@
 """Shared USDC wallet utilities for demo scripts.
 
-Handles sending testnet USDC and waiting for deposit confirmation.
-Falls back to the dev deposit endpoint if wallet config is missing.
+Handles sending testnet USDC and notifying the platform for confirmation.
 """
 
-import json
 import os
 import sys
 import time
@@ -56,11 +54,6 @@ NETWORKS = {
 }
 
 
-def has_wallet_config() -> bool:
-    """Check if testnet wallet is configured for real USDC deposits."""
-    return bool(os.environ.get("DEMO_WALLET_PRIVATE_KEY"))
-
-
 def send_usdc_deposit(
     deposit_address: str,
     amount_credits: str,
@@ -97,14 +90,36 @@ def send_usdc_deposit(
 
     signed = wallet.sign_transaction(tx)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    return tx_hash.hex()
+    h = tx_hash.hex()
+    return h if h.startswith("0x") else f"0x{h}"
 
 
-def wait_for_deposit_credit(
-    agent_client,  # AgentClient instance
+def wait_for_tx_confirmation(tx_hash: str, network: str = "base_sepolia", timeout: int = 60) -> None:
+    """Wait for a transaction to be mined on-chain."""
+    from web3 import Web3
+
+    net = NETWORKS[network]
+    w3 = Web3(Web3.HTTPProvider(net["rpc"]))
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            receipt = w3.eth.get_transaction_receipt(tx_hash)
+            if receipt is not None and receipt.status == 1:
+                return
+        except Exception:
+            pass
+        time.sleep(2)
+
+    print(f"         {RED}✗ Transaction not mined within {timeout}s{RESET}")
+    sys.exit(1)
+
+
+def wait_for_balance(
+    agent_client,
     agent_id: str,
     expected_balance: str,
-    timeout_seconds: int = 90,
+    timeout_seconds: int = 120,
     poll_interval: int = 3,
 ) -> dict:
     """Poll the balance endpoint until credits appear or timeout."""
@@ -116,7 +131,7 @@ def wait_for_deposit_credit(
         if resp.status_code == 200:
             bal = resp.json()
             if float(bal["balance"]) >= float(expected_balance):
-                print()  # newline after dots
+                print()
                 return bal
 
         dots += 1
@@ -132,46 +147,66 @@ def wait_for_deposit_credit(
     return None
 
 
-def deposit_usdc_or_fallback(
+def deposit_usdc(
     agent_client,
     agent_id: str,
     amount: str,
     deposit_address: str,
     network: str,
 ) -> dict:
-    """Send real testnet USDC if configured, otherwise use dev deposit endpoint.
+    """Send USDC, notify the platform, and wait for balance credit.
 
-    Returns the balance response dict.
+    Requires DEMO_WALLET_PRIVATE_KEY in the environment.
+    Returns the balance response dict or exits on failure.
     """
-    if has_wallet_config():
-        print(f"         {CYAN}Sending {amount} USDC on {network}...{RESET}")
-        try:
-            tx_hash = send_usdc_deposit(deposit_address, amount, network)
-            net = NETWORKS.get(network, {})
-            explorer = net.get("explorer", "")
-            print(f"         {GREEN}✓ TX broadcast:{RESET} {tx_hash[:16]}...")
-            if explorer:
-                print(f"         {DIM}{explorer}/tx/{tx_hash}{RESET}")
-
-            print(f"         {DIM}Waiting for chain monitor to detect and confirm deposit", end="", flush=True)
-            bal = wait_for_deposit_credit(agent_client, agent_id, amount)
-
-            if bal:
-                print(f"         {GREEN}✓ Deposit confirmed!{RESET} Balance: ${bal['balance']}")
-                return bal
-            else:
-                print(f"         {RED}✗ Timed out waiting for deposit confirmation{RESET}")
-                print(f"         {DIM}The chain monitor may not be running or confirmations are pending.{RESET}")
-                print(f"         {DIM}Falling back to dev deposit...{RESET}")
-
-        except Exception as e:
-            print(f"         {RED}✗ On-chain transfer failed: {e}{RESET}")
-            print(f"         {DIM}Falling back to dev deposit...{RESET}")
-
-    # Fallback: dev deposit
-    print(f"         {DIM}(Using dev deposit endpoint){RESET}")
-    resp = agent_client.post(f"/agents/{agent_id}/deposit", {"amount": amount})
-    if resp.status_code != 200:
-        print(f"         {RED}✗ Dev deposit failed: {resp.status_code} — {resp.text}{RESET}")
+    demo_key = os.environ.get("DEMO_WALLET_PRIVATE_KEY")
+    if not demo_key:
+        print(f"         {RED}✗ DEMO_WALLET_PRIVATE_KEY not set in environment.{RESET}")
+        print(f"         {DIM}Set it in .env and ensure direnv exports it (dotenv .env in .envrc).{RESET}")
         sys.exit(1)
-    return resp.json()
+
+    # 1. Send USDC on-chain
+    print(f"         {CYAN}Sending {amount} USDC on {network}...{RESET}")
+    try:
+        tx_hash = send_usdc_deposit(deposit_address, amount, network)
+    except Exception as e:
+        print(f"         {RED}✗ On-chain transfer failed: {e}{RESET}")
+        sys.exit(1)
+
+    net = NETWORKS.get(network, {})
+    explorer = net.get("explorer", "")
+    print(f"         {GREEN}✓ TX broadcast:{RESET} {tx_hash[:16]}...")
+    if explorer:
+        print(f"         {DIM}{explorer}/tx/{tx_hash}{RESET}")
+
+    # 2. Wait for tx to be mined
+    print(f"         {DIM}Waiting for transaction to be mined...", end="", flush=True)
+    wait_for_tx_confirmation(tx_hash, network)
+    print(f" {GREEN}mined!{RESET}")
+
+    # 3. Notify the platform
+    print(f"         {CYAN}Notifying platform of deposit...{RESET}")
+    resp = agent_client.post(
+        f"/agents/{agent_id}/wallet/deposit-notify",
+        {"tx_hash": tx_hash},
+    )
+    if resp.status_code != 201:
+        print(f"         {RED}✗ Deposit notify failed: {resp.status_code} — {resp.text}{RESET}")
+        sys.exit(1)
+
+    notify_data = resp.json()
+    print(f"         {GREEN}✓ Deposit registered:{RESET} {notify_data['amount_usdc']} USDC — {notify_data['message']}")
+
+    # 4. Wait for confirmations and balance credit
+    print(f"         {DIM}Waiting for {notify_data['confirmations_required']} confirmations", end="", flush=True)
+    bal = wait_for_balance(agent_client, agent_id, amount)
+
+    if bal:
+        print(f"         {GREEN}✓ Deposit confirmed and credited!{RESET} Balance: ${bal['balance']}")
+        return bal
+
+    print(f"         {RED}✗ Timed out waiting for deposit credit (120s){RESET}")
+    print(f"         {DIM}The confirmation watcher may still be running. Check logs.{RESET}")
+    if explorer:
+        print(f"         {DIM}Verify tx: {explorer}/tx/{tx_hash}{RESET}")
+    sys.exit(1)

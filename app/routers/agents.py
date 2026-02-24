@@ -14,7 +14,6 @@ from app.schemas.agent import (
     AgentResponse,
     AgentUpdate,
     BalanceResponse,
-    DepositRequest,
     ReputationResponse,
 )
 from app.services import agent as agent_service
@@ -117,27 +116,3 @@ async def get_balance(
     return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
 
 
-@router.post("/{agent_id}/deposit", response_model=BalanceResponse)
-async def deposit(
-    agent_id: uuid.UUID,
-    data: DepositRequest,
-    auth: AuthenticatedAgent = Depends(verify_request),
-    db: AsyncSession = Depends(get_db),
-) -> BalanceResponse:
-    """Add credits to agent balance (development/test only).
-
-    In production, deposits happen via USDC transfers to the agent's deposit address.
-    See GET /agents/{agent_id}/wallet/deposit-address
-    """
-    from app.config import settings
-    from fastapi import HTTPException
-
-    if settings.env not in ("development", "test"):
-        raise HTTPException(
-            status_code=403,
-            detail="Direct deposits disabled in production. Use USDC deposit via /wallet/deposit-address",
-        )
-    if auth.agent_id != agent_id:
-        raise HTTPException(status_code=403, detail="Can only deposit to own account")
-    agent = await agent_service.deposit(db, agent_id, data.amount)
-    return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)

@@ -34,7 +34,7 @@ import httpx
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
 
-from demo_wallet import deposit_usdc_or_fallback, has_wallet_config
+from demo_wallet import deposit_usdc
 
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
 
@@ -155,7 +155,7 @@ This script runs in an isolated Docker container with:
 
 It reads the deliverable from /input/result.json and verifies:
   1. Output is valid JSON with a 'records' array
-  2. At least 400 records extracted (80% yield from 500 pages)
+  2. At least 40 records extracted (80% yield from 50 pages)
   3. Every record has required fields: owner_name, property_address
   4. No null or empty values in required fields
   5. All unit counts are positive integers
@@ -188,10 +188,10 @@ def main():
     print(f"CHECK 1 ✓ Valid structure: {len(records)} records")
 
     # Check 2: Minimum count
-    if len(records) < 400:
-        errors.append(f"Only {len(records)} records (need ≥400 for 80% yield)")
+    if len(records) < 40:
+        errors.append(f"Only {len(records)} records (need ≥40 for 80% yield)")
     else:
-        print(f"CHECK 2 ✓ Record count: {len(records)} ≥ 400")
+        print(f"CHECK 2 ✓ Record count: {len(records)} ≥ 40")
 
     # Check 3: Required fields present
     missing_fields = 0
@@ -313,13 +313,7 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"My deposit address: {addr_data['address']}")
     agent_says("Bob", YELLOW, f"Network: {addr_data['network']} | USDC: {addr_data['usdc_contract'][:10]}...")
 
-    if has_wallet_config():
-        print(f"         {GREEN}Testnet wallet detected — sending real USDC on Base Sepolia!{RESET}")
-    else:
-        print(f"         {DIM}No DEMO_WALLET_PRIVATE_KEY set — using dev deposit.{RESET}")
-        print(f"         {DIM}Set DEMO_WALLET_PRIVATE_KEY in .env to send real testnet USDC.{RESET}")
-
-    data = deposit_usdc_or_fallback(bob, bob.agent_id, "500.00", addr_data["address"], addr_data["network"])
+    data = deposit_usdc(bob, bob.agent_id, "5.00", addr_data["address"], addr_data["network"])
     agent_says("Bob", YELLOW, f"Balance: ${data['balance']}")
 
     step(4, "Alice creates a service listing")
@@ -328,7 +322,7 @@ def main() -> None:
         "description": "Extract structured JSON from PDF documents. "
                        "Supports tables, forms, and handwritten text via OCR.",
         "price_model": "per_unit",
-        "base_price": "0.05",
+        "base_price": "0.005",
         "sla": {"max_latency_seconds": 3600, "uptime_pct": 99.5},
     }), 201, "Alice listing")
     listing_id = data["listing_id"]
@@ -358,10 +352,10 @@ def main() -> None:
     data = expect(bob.post("/jobs", {
         "seller_agent_id": alice.agent_id,
         "listing_id": listing_id,
-        "max_budget": "25.00",
+        "max_budget": "2.50",
         "requirements": {
             "input_format": "pdf",
-            "volume_pages": 500,
+            "volume_pages": 50,
             "output_format": "json",
             "fields": ["owner_name", "property_address", "units"],
         },
@@ -376,26 +370,26 @@ def main() -> None:
         "max_rounds": 5,
     }), 201, "Job proposal")
     job_id = data["job_id"]
-    agent_says("Bob", YELLOW, f"Job proposed: {job_id[:8]}... | Budget: $25.00")
+    agent_says("Bob", YELLOW, f"Job proposed: {job_id[:8]}... | Budget: $2.50")
     agent_says("Bob", YELLOW, "Acceptance: script-based verification (6 checks)")
 
     step(7, "Alice reviews terms and counters: $30, faster delivery")
     data = expect(alice.post(f"/jobs/{job_id}/counter", {
-        "proposed_price": "30.00",
+        "proposed_price": "3.00",
         "counter_terms": {"delivery_deadline": "2026-02-27T00:00:00Z"},
-        "message": "500 pages with OCR is heavy lifting. $30 flat, but I'll deliver a day early.",
+        "message": "50 pages with OCR is decent work. $3 flat, but I'll deliver a day early.",
     }), 200, "Alice counter")
-    agent_says("Alice", BLUE, f"Counter: $30.00 — \"500 pages is heavy, but I'll deliver early.\"")
+    agent_says("Alice", BLUE, f"Counter: $3.00 — \"50 pages is decent work, but I'll deliver early.\"")
     print(f"           Status: {data['status']} | Round: {data['current_round']}/{data['max_rounds']}")
 
     step(8, "Bob counters back: $28, keep the early delivery")
     data = expect(bob.post(f"/jobs/{job_id}/counter", {
-        "proposed_price": "28.00",
+        "proposed_price": "2.80",
         "counter_terms": {"delivery_deadline": "2026-02-27T00:00:00Z"},
         "accepted_terms": ["early_delivery"],
-        "message": "Love the early delivery. Meet me at $28?",
+        "message": "Love the early delivery. Meet me at $2.80?",
     }), 200, "Bob counter")
-    agent_says("Bob", YELLOW, f"Counter: $28.00 — \"Meet me at $28?\"")
+    agent_says("Bob", YELLOW, f"Counter: $2.80 — \"Meet me at $2.80?\"")
     print(f"           Status: {data['status']} | Round: {data['current_round']}/{data['max_rounds']}")
 
     step(9, "Alice accepts Bob's terms")
@@ -426,7 +420,7 @@ def main() -> None:
     agent_says("Alice", BLUE, "Starting PDF extraction... ⚙️")
     print(f"           Status: {data['status']}")
 
-    step(12, "Alice delivers 450 extracted records")
+    step(12, "Alice delivers 45 extracted records")
     print(f"         {DIM}(In production, Alice's agent runs real PDF extraction.")
     print(f"          Here we simulate a high-quality deliverable.){RESET}")
     records = [
@@ -436,10 +430,10 @@ def main() -> None:
                                 f"{'Springfield Portland Oakland Salem Eugene'.split()[i % 5]} CA {90000 + i}",
             "units": (i % 6) + 1,
         }
-        for i in range(450)
+        for i in range(45)
     ]
     data = expect(alice.post(f"/jobs/{job_id}/deliver", {"result": {"records": records}}), 200, "Deliver")
-    agent_says("Alice", BLUE, f"Delivered! {len(records)} records from 500 pages (90% yield)")
+    agent_says("Alice", BLUE, f"Delivered! {len(records)} records from 50 pages (90% yield)")
     print(f"           Status: {data['status']}")
     print(f"           Sample record:")
     show_json(records[0])
@@ -519,11 +513,11 @@ def main() -> None:
 
     alice_earned = Decimal(str(alice_bal["balance"]))
     bob_remaining = Decimal(str(bob_bal["balance"]))
-    bob_spent = Decimal("500.00") - bob_remaining
+    bob_spent = Decimal("5.00") - bob_remaining
     platform_fee = bob_spent - alice_earned
 
     print(f"           {'─' * 42}")
-    print(f"           Bob deposited:        $500.00")
+    print(f"           Bob deposited:        $5.00")
     print(f"           Agreed price:         ${agreed_price}")
     print(f"           Platform fee (2.5%):  ${platform_fee}")
     print(f"           {'─' * 42}")
@@ -607,7 +601,7 @@ def main() -> None:
     {CYAN}3.{RESET} Funded account via USDC deposit address (Base L2)
     {CYAN}4.{RESET} Negotiated price over 2 rounds ($25 → $30 → $28)
     {CYAN}5.{RESET} Locked ${agreed_price} in platform escrow
-    {CYAN}6.{RESET} Contractor delivered 450 records
+    {CYAN}6.{RESET} Contractor delivered 45 records
     {CYAN}7.{RESET} Client's verification script ran in a sandboxed container
        {DIM}(no network, read-only FS, non-root, memory-limited){RESET}
     {CYAN}8.{RESET} All 6 checks passed → escrow auto-released (minus 2.5% fee)

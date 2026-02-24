@@ -239,32 +239,25 @@ async def request_withdrawal(
         "Withdrawal %s created: agent=%s amount=%s fee=%s net=%s dest=%s",
         withdrawal.withdrawal_id, agent_id, amount, fee, net_payout, destination_address,
     )
+
+    # Process immediately in the background
+    asyncio.create_task(_process_withdrawal(withdrawal.withdrawal_id))
+
     return withdrawal
 
 
 # ---------------------------------------------------------------------------
-# Withdrawal processor (background task)
+# Per-withdrawal processor (background task)
 # ---------------------------------------------------------------------------
 
 
-async def process_pending_withdrawals(db: AsyncSession) -> list[WithdrawalRequest]:
-    """Process all pending withdrawals by sending USDC on-chain.
+async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
+    """Background task: send USDC on-chain for a single withdrawal."""
+    from app.database import async_session
 
-    Called periodically by the chain monitor background task.
-    """
     if not settings.treasury_wallet_private_key:
-        logger.warning("Treasury wallet not configured — skipping withdrawal processing")
-        return []
-
-    result = await db.execute(
-        select(WithdrawalRequest)
-        .where(WithdrawalRequest.status == WithdrawalStatus.PENDING)
-        .with_for_update(skip_locked=True)  # Skip rows locked by concurrent processors
-    )
-    pending = result.scalars().all()
-
-    if not pending:
-        return []
+        logger.error("Treasury wallet not configured — cannot process withdrawal %s", withdrawal_id)
+        return
 
     from eth_account import Account
     from web3 import AsyncWeb3, AsyncHTTPProvider
@@ -276,8 +269,16 @@ async def process_pending_withdrawals(db: AsyncSession) -> list[WithdrawalReques
         abi=ERC20_TRANSFER_ABI,
     )
 
-    processed = []
-    for withdrawal in pending:
+    async with async_session() as db:
+        result = await db.execute(
+            select(WithdrawalRequest)
+            .where(WithdrawalRequest.withdrawal_id == withdrawal_id)
+            .with_for_update()
+        )
+        withdrawal = result.scalar_one_or_none()
+        if withdrawal is None or withdrawal.status != WithdrawalStatus.PENDING:
+            return
+
         withdrawal.status = WithdrawalStatus.PROCESSING
         await db.commit()
 
@@ -290,7 +291,7 @@ async def process_pending_withdrawals(db: AsyncSession) -> list[WithdrawalReques
                 "from": treasury.address,
                 "nonce": nonce,
                 "chainId": settings.chain_id,
-                "gas": 100_000,  # ERC-20 transfer typically ~65k
+                "gas": 100_000,
                 "maxFeePerGas": await w3.eth.gas_price * 2,
                 "maxPriorityFeePerGas": await w3.eth.max_priority_fee,
             })
@@ -307,12 +308,9 @@ async def process_pending_withdrawals(db: AsyncSession) -> list[WithdrawalReques
                 "Withdrawal %s completed: tx=%s amount=%s",
                 withdrawal.withdrawal_id, withdrawal.tx_hash, withdrawal.net_payout,
             )
-            processed.append(withdrawal)
 
         except Exception as e:
-            logger.error(
-                "Withdrawal %s failed: %s", withdrawal.withdrawal_id, str(e)
-            )
+            logger.error("Withdrawal %s failed: %s", withdrawal.withdrawal_id, str(e))
             withdrawal.status = WithdrawalStatus.FAILED
             withdrawal.error_message = str(e)[:1000]
             withdrawal.processed_at = datetime.now(UTC)
@@ -331,8 +329,6 @@ async def process_pending_withdrawals(db: AsyncSession) -> list[WithdrawalReques
                 "Withdrawal %s refunded %s to agent %s",
                 withdrawal.withdrawal_id, withdrawal.amount, withdrawal.agent_id,
             )
-
-    return processed
 
 
 # ---------------------------------------------------------------------------
@@ -380,121 +376,117 @@ async def credit_deposit(db: AsyncSession, deposit_tx_id: uuid.UUID) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Chain monitor (background task)
+# Per-deposit confirmation watcher
 # ---------------------------------------------------------------------------
 
 
-async def _poll_deposits(db: AsyncSession) -> None:
-    """Poll the chain for new USDC transfers to known deposit addresses."""
+async def verify_deposit_tx(
+    db: AsyncSession, agent_id: uuid.UUID, tx_hash: str,
+) -> DepositTransaction:
+    """Verify a tx_hash is a valid USDC transfer to the agent's deposit address.
+
+    Creates a DepositTransaction record and returns it. Raises HTTPException on
+    invalid/mismatched transactions.
+    """
     from web3 import AsyncWeb3, AsyncHTTPProvider
 
+    # Check for duplicate
+    existing = await db.execute(
+        select(DepositTransaction).where(DepositTransaction.tx_hash == tx_hash)
+    )
+    if (dep := existing.scalar_one_or_none()) is not None:
+        return dep
+
+    # Get agent's deposit address
+    result = await db.execute(
+        select(DepositAddress).where(DepositAddress.agent_id == agent_id)
+    )
+    deposit_addr = result.scalar_one_or_none()
+    if deposit_addr is None:
+        raise HTTPException(status_code=404, detail="No deposit address found for this agent")
+
     w3 = AsyncWeb3(AsyncHTTPProvider(settings.resolved_rpc_url))
+    try:
+        receipt = await w3.eth.get_transaction_receipt(tx_hash)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Transaction not found on chain")
+
+    if receipt.status == 0:
+        raise HTTPException(status_code=400, detail="Transaction reverted on chain")
+
+    # Decode USDC Transfer events from the receipt
     usdc = w3.eth.contract(
         address=w3.to_checksum_address(settings.resolved_usdc_address),
         abi=ERC20_TRANSFER_ABI,
     )
+    transfers = usdc.events.Transfer().process_receipt(receipt)
 
-    # Get all deposit addresses
-    result = await db.execute(select(DepositAddress))
-    addresses = {addr.address.lower(): addr for addr in result.scalars().all()}
-    if not addresses:
-        return
+    # Find the transfer to this agent's deposit address
+    matched = None
+    for transfer in transfers:
+        if transfer.args["to"].lower() == deposit_addr.address.lower():
+            matched = transfer
+            break
 
-    current_block = await w3.eth.block_number
-    # Look back ~100 blocks (~3 minutes on Base)
-    from_block = max(0, current_block - 100)
-
-    try:
-        transfer_filter = {
-            "fromBlock": from_block,
-            "toBlock": "latest",
-        }
-        events = await usdc.events.Transfer().get_logs(**transfer_filter)
-    except Exception as e:
-        logger.error("Failed to fetch Transfer events: %s", e)
-        return
-
-    for event in events:
-        to_addr = event.args["to"].lower()
-        if to_addr not in addresses:
-            continue
-
-        tx_hash = event.transactionHash.hex()
-        # Check if we've already seen this tx
-        existing = await db.execute(
-            select(DepositTransaction).where(DepositTransaction.tx_hash == tx_hash)
-        )
-        if existing.scalar_one_or_none() is not None:
-            continue
-
-        deposit_addr = addresses[to_addr]
-        raw_amount = event.args["value"]
-        credits = _usdc_to_credits(raw_amount)
-
-        deposit_tx = DepositTransaction(
-            deposit_tx_id=uuid.uuid4(),
-            agent_id=deposit_addr.agent_id,
-            tx_hash=tx_hash,
-            from_address=event.args["from"],
-            amount_usdc=Decimal(raw_amount) / Decimal(USDC_SCALE),
-            amount_credits=credits,
-            block_number=event.blockNumber,
-            status=DepositStatus.CONFIRMING,
-        )
-        db.add(deposit_tx)
-        await db.commit()
-
-        logger.info(
-            "Deposit detected: tx=%s agent=%s amount=%s USDC",
-            tx_hash, deposit_addr.agent_id, deposit_tx.amount_usdc,
+    if matched is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transaction does not contain a USDC transfer to {deposit_addr.address}",
         )
 
+    raw_amount = matched.args["value"]
+    credits = _usdc_to_credits(raw_amount)
 
-async def _update_confirmations(db: AsyncSession) -> None:
-    """Update confirmation counts and credit confirmed deposits."""
-    from web3 import AsyncWeb3, AsyncHTTPProvider
-
-    w3 = AsyncWeb3(AsyncHTTPProvider(settings.resolved_rpc_url))
-    current_block = await w3.eth.block_number
-
-    result = await db.execute(
-        select(DepositTransaction).where(
-            DepositTransaction.status.in_([
-                DepositStatus.PENDING,
-                DepositStatus.CONFIRMING,
-            ])
-        )
+    deposit_tx = DepositTransaction(
+        deposit_tx_id=uuid.uuid4(),
+        agent_id=agent_id,
+        tx_hash=tx_hash,
+        from_address=matched.args["from"],
+        amount_usdc=Decimal(raw_amount) / Decimal(USDC_SCALE),
+        amount_credits=credits,
+        block_number=receipt.blockNumber,
+        status=DepositStatus.CONFIRMING,
     )
-    pending_deposits = result.scalars().all()
-
-    for deposit in pending_deposits:
-        confirmations = current_block - deposit.block_number
-        deposit.confirmations = max(0, confirmations)
-
-        if confirmations >= settings.deposit_confirmations_required:
-            await credit_deposit(db, deposit.deposit_tx_id)
-
-
-async def chain_monitor_loop() -> None:
-    """Main loop for the chain monitor background task."""
-    from app.database import async_session
+    db.add(deposit_tx)
+    await db.commit()
+    await db.refresh(deposit_tx)
 
     logger.info(
-        "Chain monitor started: network=%s poll_interval=%ds",
-        settings.blockchain_network,
-        settings.chain_monitor_poll_interval_seconds,
+        "Deposit registered: tx=%s agent=%s amount=%s USDC — waiting for %d confirmations",
+        tx_hash, agent_id, deposit_tx.amount_usdc, settings.deposit_confirmations_required,
     )
+    return deposit_tx
+
+
+async def _wait_and_credit_deposit(deposit_tx_id: uuid.UUID, block_number: int) -> None:
+    """Background task: wait for enough confirmations, then credit the deposit."""
+    from web3 import AsyncWeb3, AsyncHTTPProvider
+    from app.database import async_session
+
+    w3 = AsyncWeb3(AsyncHTTPProvider(settings.resolved_rpc_url))
+    required = settings.deposit_confirmations_required
 
     while True:
         try:
-            async with async_session() as db:
-                await _poll_deposits(db)
-                await _update_confirmations(db)
-                await process_pending_withdrawals(db)
-        except Exception as e:
-            logger.error("Chain monitor error: %s", e, exc_info=True)
+            current_block = await w3.eth.block_number
+            confirmations = current_block - block_number
 
-        await asyncio.sleep(settings.chain_monitor_poll_interval_seconds)
+            if confirmations >= required:
+                async with async_session() as db:
+                    await credit_deposit(db, deposit_tx_id)
+                logger.info("Deposit %s confirmed and credited (%d confirmations)", deposit_tx_id, confirmations)
+                return
+
+            logger.debug(
+                "Deposit %s: %d/%d confirmations",
+                deposit_tx_id, confirmations, required,
+            )
+        except Exception as e:
+            logger.error("Error checking confirmations for %s: %s", deposit_tx_id, e)
+
+        # Base L2 has ~2s block times; poll every 4s
+        await asyncio.sleep(4)
+
 
 
 # ---------------------------------------------------------------------------

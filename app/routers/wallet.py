@@ -11,6 +11,8 @@ from app.database import get_db
 from app.schemas.wallet import (
     AvailableBalanceResponse,
     DepositAddressResponse,
+    DepositNotifyRequest,
+    DepositNotifyResponse,
     DepositTransactionResponse,
     TransactionHistoryResponse,
     WithdrawalCreateRequest,
@@ -42,6 +44,41 @@ async def get_deposit_address(
         network=settings.blockchain_network,
         usdc_contract=settings.resolved_usdc_address,
         min_deposit=settings.min_deposit_amount,
+    )
+
+
+@router.post("/deposit-notify", response_model=DepositNotifyResponse, status_code=201)
+async def notify_deposit(
+    agent_id: uuid.UUID,
+    data: DepositNotifyRequest,
+    auth: AuthenticatedAgent = Depends(verify_request),
+    db: AsyncSession = Depends(get_db),
+) -> DepositNotifyResponse:
+    """Notify the platform of a USDC deposit transaction.
+
+    Verifies the tx on-chain, creates a deposit record, and spawns a background
+    task to wait for confirmations before crediting the agent's balance.
+    """
+    import asyncio
+
+    _assert_own_agent(auth, agent_id)
+    deposit_tx = await wallet_service.verify_deposit_tx(db, agent_id, data.tx_hash)
+
+    # Spawn confirmation watcher if not already credited
+    if deposit_tx.status.value != "credited":
+        asyncio.create_task(
+            wallet_service._wait_and_credit_deposit(
+                deposit_tx.deposit_tx_id, deposit_tx.block_number,
+            )
+        )
+
+    return DepositNotifyResponse(
+        deposit_tx_id=deposit_tx.deposit_tx_id,
+        tx_hash=deposit_tx.tx_hash,
+        amount_usdc=deposit_tx.amount_usdc,
+        status=deposit_tx.status.value,
+        confirmations_required=settings.deposit_confirmations_required,
+        message="Deposit detected. Waiting for confirmations before crediting balance.",
     )
 
 
