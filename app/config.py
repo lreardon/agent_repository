@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     test_runner_timeout_per_suite: int = 300
     test_runner_memory_limit_mb: int = 256
 
+    # Demo only — not used by the app, but must be accepted from .env
+    demo_wallet_private_key: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
