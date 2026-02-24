@@ -280,9 +280,12 @@ def main() -> None:
     bob.agent_id = data["agent_id"]
     agent_says("Bob", YELLOW, f"Registered: {bob.agent_id[:8]}...")
 
-    step(2, "Bob deposits credits and Alice creates a listing")
+    step(2, "Bob funds his account and Alice creates a listing")
+    data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
+    agent_says("Bob", YELLOW, f"Deposit address: {data['address']} ({data['network']})")
+    print(f"         {DIM}(Using dev deposit for demo){RESET}")
     expect(bob.post(f"/agents/{bob.agent_id}/deposit", {"amount": "500.00"}), 200, "Bob deposit")
-    agent_says("Bob", YELLOW, "Deposited $500.00")
+    agent_says("Bob", YELLOW, "Balance: $500.00")
 
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
         "skill_id": "pdf-extraction",
@@ -474,11 +477,22 @@ def main() -> None:
     platform_says("No fee collected — job failed verification")
     print(f"           {'─' * 42}")
 
+    step(10, "Bob withdraws his refunded credits as USDC")
+    data = expect(bob.post(f"/agents/{bob.agent_id}/wallet/withdraw", {
+        "amount": str(bob_bal["balance"]),
+        "destination_address": "0xBobsWallet00000000000000000000000000000000",
+    }), 201, "Bob withdrawal")
+    agent_says("Bob", YELLOW, f"Withdrawal: ${data['amount']} → ${data['net_payout']} USDC (${data['fee']} fee)")
+    platform_says(f"USDC withdrawal queued → {data['destination_address'][:10]}...")
+
+    bob_final = expect(bob.get(f"/agents/{bob.agent_id}/balance", signed=True), 200, "Bob final balance")
+    agent_says("Bob", YELLOW, f"Final balance: ${bob_final['balance']} (withdrawn to USDC)")
+
     # ═══════════════════════════════════════════════════════════════
     banner("Act 5: Reputation — The Permanent Record 📉")
     # ═══════════════════════════════════════════════════════════════
 
-    step(10, "Bob leaves a 1-star review")
+    step(11, "Bob leaves a 1-star review")
     data = expect(bob.post(f"/jobs/{job_id}/reviews", {
         "rating": 1,
         "tags": ["low-quality", "incomplete", "unreliable"],
@@ -489,7 +503,7 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"{'⭐' * 1} — \"{data.get('comment', '')[:60]}...\"")
     show_json(data, ["rating", "tags", "role"])
 
-    step(11, "Alice reviews Bob anyway")
+    step(12, "Alice reviews Bob anyway")
     data = expect(alice.post(f"/jobs/{job_id}/reviews", {
         "rating": 3,
         "tags": ["strict-criteria", "fair-process"],
@@ -497,7 +511,7 @@ def main() -> None:
     }), 201, "Alice review")
     agent_says("Alice", BLUE, f"{'⭐' * 3} — \"{data.get('comment', '')[:60]}...\"")
 
-    step(12, "Alice's reputation after the failed job")
+    step(13, "Alice's reputation after the failed job")
     rep = expect(bob.get(f"/agents/{alice.agent_id}/reputation"), 200, "Reputation")
     print(f"           Seller rating: {RED}{rep['reputation_seller_display']}{RESET}")
     print(f"           Total reviews: {rep['total_reviews_as_seller']}")
@@ -520,8 +534,9 @@ def main() -> None:
        {RED}✗{RESET} 15 invalid unit counts (negative)
        {RED}✗{RESET} 15 duplicate addresses
     {CYAN}3.{RESET} Escrow auto-refunded to Bob — ${agreed_price} returned
-    {CYAN}4.{RESET} Alice earned $0 and got a 1-star review
-    {CYAN}5.{RESET} Platform collected no fee (no successful transaction)
+    {CYAN}4.{RESET} Bob withdrew refund as USDC ($0.50 flat fee)
+    {CYAN}5.{RESET} Alice earned $0 and got a 1-star review
+    {CYAN}6.{RESET} Platform collected no fee (no successful transaction)
 
   {BOLD}Key takeaways:{RESET}
     • {WHITE}Alice couldn't negotiate or dispute the results —

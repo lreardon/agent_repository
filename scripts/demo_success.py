@@ -7,13 +7,15 @@ Agent Bob:   Data Pipeline agent (the client)
 
 Showcases:
   1. Registration & discovery
-  2. Multi-round negotiation
-  3. Escrow funding
-  4. Work execution & delivery
-  5. Script-based acceptance criteria (code as verification)
-  6. Sandboxed neutral-arena verification
-  7. Automatic escrow settlement
-  8. Mutual reputation reviews
+  2. USDC deposit address & on-ramp (Base L2)
+  3. Multi-round negotiation
+  4. Escrow funding
+  5. Work execution & delivery
+  6. Script-based acceptance criteria (code as verification)
+  7. Sandboxed neutral-arena verification
+  8. Automatic escrow settlement
+  9. USDC withdrawal & off-ramp
+ 10. Mutual reputation reviews
 
 Run:
   1. Start the API:  uvicorn app.main:app --port 8080
@@ -304,9 +306,15 @@ def main() -> None:
     banner("Act 2: Marketplace — Listing & Discovery")
     # ═══════════════════════════════════════════════════════════════
 
-    step(3, "Bob deposits 500 credits to his account")
+    step(3, "Bob gets his USDC deposit address")
+    data = expect(bob.get(f"/agents/{bob.agent_id}/wallet/deposit-address", signed=True), 200, "Deposit address")
+    agent_says("Bob", YELLOW, f"My deposit address: {data['address']}")
+    agent_says("Bob", YELLOW, f"Network: {data['network']} | USDC: {data['usdc_contract'][:10]}...")
+    print(f"         {DIM}In production, Bob sends USDC on Base L2 to this address.")
+    print(f"         Credits appear after 12 block confirmations (~24s on Base).{RESET}")
+    print(f"         {DIM}(Using dev deposit for demo purposes){RESET}")
     data = expect(bob.post(f"/agents/{bob.agent_id}/deposit", {"amount": "500.00"}), 200, "Bob deposit")
-    agent_says("Bob", YELLOW, f"Deposited. Balance: ${data['balance']}")
+    agent_says("Bob", YELLOW, f"Balance: ${data['balance']}")
 
     step(4, "Alice creates a service listing")
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
@@ -519,10 +527,34 @@ def main() -> None:
     print(f"           {'─' * 42}")
 
     # ═══════════════════════════════════════════════════════════════
-    banner("Act 8: Reputation — Agents Review Each Other")
+    banner("Act 8: Off-Ramp — Alice Withdraws Her Earnings")
     # ═══════════════════════════════════════════════════════════════
 
-    step(15, "Bob reviews Alice (client → seller)")
+    step(15, "Alice checks her wallet balance")
+    wallet_bal = expect(alice.get(f"/agents/{alice.agent_id}/wallet/balance", signed=True), 200, "Alice wallet")
+    agent_says("Alice", BLUE, f"Balance: ${wallet_bal['balance']} | Available: ${wallet_bal['available_balance']}")
+
+    step(16, "Alice withdraws her earnings as USDC")
+    withdraw_amount = alice_earned
+    data = expect(alice.post(f"/agents/{alice.agent_id}/wallet/withdraw", {
+        "amount": str(withdraw_amount),
+        "destination_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18",
+    }), 201, "Alice withdrawal")
+    agent_says("Alice", BLUE, f"Withdrawal requested: ${data['amount']}")
+    agent_says("Alice", BLUE, f"Fee: ${data['fee']} (covers Base L2 gas)")
+    agent_says("Alice", BLUE, f"USDC to receive: ${data['net_payout']}")
+    platform_says(f"Withdrawal {data['status']} → USDC sent to {data['destination_address'][:10]}...")
+    show_json(data, ["withdrawal_id", "amount", "fee", "net_payout", "status"])
+
+    step(17, "Alice's transaction history")
+    txns = expect(alice.get(f"/agents/{alice.agent_id}/wallet/transactions", signed=True), 200, "Transactions")
+    agent_says("Alice", BLUE, f"Withdrawals: {len(txns['withdrawals'])} | Deposits: {len(txns['deposits'])}")
+
+    # ═══════════════════════════════════════════════════════════════
+    banner("Act 9: Reputation — Agents Review Each Other")
+    # ═══════════════════════════════════════════════════════════════
+
+    step(18, "Bob reviews Alice (client → seller)")
     data = expect(bob.post(f"/jobs/{job_id}/reviews", {
         "rating": 5,
         "tags": ["fast", "reliable", "accurate", "high-yield"],
@@ -532,7 +564,7 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"{'⭐' * data['rating']} — \"{data.get('comment', '')[:70]}...\"")
     show_json(data, ["rating", "tags", "role"])
 
-    step(16, "Alice reviews Bob (seller → client)")
+    step(19, "Alice reviews Bob (seller → client)")
     data = expect(alice.post(f"/jobs/{job_id}/reviews", {
         "rating": 4,
         "tags": ["clear-spec", "good-payer", "fair-criteria"],
@@ -541,7 +573,7 @@ def main() -> None:
     }), 201, "Alice review")
     agent_says("Alice", BLUE, f"{'⭐' * data['rating']} — \"{data.get('comment', '')[:70]}...\"")
 
-    step(17, "Alice's reputation on the platform")
+    step(20, "Alice's reputation on the platform")
     rep = expect(bob.get(f"/agents/{alice.agent_id}/reputation"), 200, "Reputation")
     print(f"           Seller rating: {rep['reputation_seller_display']}")
     print(f"           Total reviews: {rep['total_reviews_as_seller']}")
@@ -558,14 +590,17 @@ def main() -> None:
 
     {CYAN}1.{RESET} Registered identities with Ed25519 keypairs
     {CYAN}2.{RESET} Found each other through capability-based discovery
-    {CYAN}3.{RESET} Negotiated price over 2 rounds ($25 → $30 → $28)
-    {CYAN}4.{RESET} Locked ${agreed_price} in platform escrow
-    {CYAN}5.{RESET} Contractor delivered 450 records
-    {CYAN}6.{RESET} Client's verification script ran in a sandboxed container
+    {CYAN}3.{RESET} Funded account via USDC deposit address (Base L2)
+    {CYAN}4.{RESET} Negotiated price over 2 rounds ($25 → $30 → $28)
+    {CYAN}5.{RESET} Locked ${agreed_price} in platform escrow
+    {CYAN}6.{RESET} Contractor delivered 450 records
+    {CYAN}7.{RESET} Client's verification script ran in a sandboxed container
        {DIM}(no network, read-only FS, non-root, memory-limited){RESET}
-    {CYAN}7.{RESET} All 6 checks passed → escrow auto-released (minus 2.5% fee)
-    {CYAN}8.{RESET} Both agents left reviews, building on-chain reputation
+    {CYAN}8.{RESET} All 6 checks passed → escrow auto-released (minus 2.5% fee)
+    {CYAN}9.{RESET} Contractor withdrew earnings as USDC ($0.50 flat fee)
+   {CYAN}10.{RESET} Both agents left reviews, building reputation
 
+  {BOLD}USDC in → credits → escrow → work → verify → settle → USDC out{RESET}
   {BOLD}The code is the contract. The sandbox is the judge.{RESET}
   {BOLD}No humans required.{RESET}
 """)
