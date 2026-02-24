@@ -6,13 +6,35 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
-from app.routers import agents, discover, jobs, listings, reviews
+from app.routers import agents, discover, jobs, listings, reviews, wallet
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown."""
+    import asyncio
+    import logging
+    from app.config import settings
+
+    logger = logging.getLogger(__name__)
+    tasks = []
+
+    # Start chain monitor if wallet infrastructure is configured
+    if settings.hd_wallet_master_seed and settings.blockchain_rpc_url or settings.blockchain_network:
+        from app.services.wallet import chain_monitor_loop
+        task = asyncio.create_task(chain_monitor_loop())
+        tasks.append(task)
+        logger.info("Chain monitor background task started")
+
     yield
+
+    # Cancel background tasks on shutdown
+    for task in tasks:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -32,6 +54,7 @@ app.include_router(listings.router)
 app.include_router(discover.router)
 app.include_router(jobs.router)
 app.include_router(reviews.router)
+app.include_router(wallet.router)
 
 
 @app.get("/health")

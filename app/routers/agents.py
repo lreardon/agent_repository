@@ -14,7 +14,6 @@ from app.schemas.agent import (
     AgentResponse,
     AgentUpdate,
     BalanceResponse,
-    DepositRequest,
     ReputationResponse,
 )
 from app.services import agent as agent_service
@@ -117,16 +116,6 @@ async def get_balance(
     return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
 
 
-@router.post("/{agent_id}/deposit", response_model=BalanceResponse)
-async def deposit(
-    agent_id: uuid.UUID,
-    data: DepositRequest,
-    auth: AuthenticatedAgent = Depends(verify_request),
-    db: AsyncSession = Depends(get_db),
-) -> BalanceResponse:
-    """Add credits to agent balance. Own agent only."""
-    if auth.agent_id != agent_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Can only deposit to own account")
-    agent = await agent_service.deposit(db, agent_id, data.amount)
-    return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
+    # NOTE: The old POST /{agent_id}/deposit endpoint has been removed.
+    # Deposits now happen via USDC transfers to the agent's deposit address.
+    # See GET /agents/{agent_id}/wallet/deposit-address
