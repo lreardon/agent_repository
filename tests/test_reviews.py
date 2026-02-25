@@ -12,14 +12,16 @@ from tests.conftest import make_agent_data, make_auth_headers
 async def _create_agent(client: AsyncClient) -> tuple[str, str]:
     priv, pub = generate_keypair()
     resp = await client.post("/agents", json=make_agent_data(pub))
+    assert resp.status_code == 201
     return resp.json()["agent_id"], priv
 
 
 async def _deposit(client: AsyncClient, agent_id: str, priv: str, amount: str) -> None:
+    """Credit agent balance via dev-only deposit endpoint."""
     data = {"amount": amount}
-    body = data
-    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", body)
-    await client.post(f"/agents/{agent_id}/deposit", json=data, headers=headers)
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", data)
+    resp = await client.post(f"/agents/{agent_id}/deposit", json=data, headers=headers)
+    assert resp.status_code == 200, f"Dev deposit failed: {resp.status_code} {resp.text}"
 
 
 async def _complete_job(
@@ -33,29 +35,35 @@ async def _complete_job(
     body = data
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", body)
     resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 201, f"Propose failed: {resp.status_code} {resp.text}"
     job_id = resp.json()["job_id"]
 
     # Accept
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
-    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    assert resp.status_code == 200, f"Accept failed: {resp.status_code} {resp.text}"
 
     # Fund
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
-    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    assert resp.status_code == 200, f"Fund failed: {resp.status_code} {resp.text}"
 
     # Start
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
-    await client.post(f"/jobs/{job_id}/start", headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/start", headers=headers)
+    assert resp.status_code == 200, f"Start failed: {resp.status_code} {resp.text}"
 
     # Deliver
     deliver = {"result": {"data": "done"}}
     body = deliver
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", body)
-    await client.post(f"/jobs/{job_id}/deliver", json=deliver, headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/deliver", json=deliver, headers=headers)
+    assert resp.status_code == 200, f"Deliver failed: {resp.status_code} {resp.text}"
 
     # Complete
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
-    await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 200, f"Complete failed: {resp.status_code} {resp.text}"
 
     return job_id
 
@@ -115,7 +123,8 @@ async def test_duplicate_review_rejected(client: AsyncClient) -> None:
     data = {"rating": 5}
     body = data
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", body)
-    await client.post(f"/jobs/{job_id}/reviews", json=data, headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/reviews", json=data, headers=headers)
+    assert resp.status_code == 201
 
     # Try again
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", body)
@@ -153,10 +162,12 @@ async def test_reputation_updates(client: AsyncClient) -> None:
         data = {"rating": rating}
         body = data
         headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", body)
-        await client.post(f"/jobs/{job_id}/reviews", json=data, headers=headers)
+        resp = await client.post(f"/jobs/{job_id}/reviews", json=data, headers=headers)
+        assert resp.status_code == 201
 
     # Seller reputation with confidence factor: avg=4.5, confidence=2/20=0.1, score=0.45
     resp = await client.get(f"/agents/{seller_id}")
+    assert resp.status_code == 200
     assert resp.json()["reputation_seller"] == "0.45"
 
 
@@ -172,7 +183,8 @@ async def test_get_agent_reviews(client: AsyncClient) -> None:
     data = {"rating": 5, "comment": "Great"}
     body = data
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", body)
-    await client.post(f"/jobs/{job_id}/reviews", json=data, headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/reviews", json=data, headers=headers)
+    assert resp.status_code == 201
 
     resp = await client.get(f"/agents/{seller_id}/reviews")
     assert resp.status_code == 200
@@ -191,6 +203,7 @@ async def test_cannot_review_incomplete_job(client: AsyncClient) -> None:
     body = data
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", body)
     resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 201
     job_id = resp.json()["job_id"]
 
     review = {"rating": 5}
