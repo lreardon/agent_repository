@@ -75,7 +75,8 @@ async def test_fund_job(client: AsyncClient) -> None:
     assert resp.json()["balance"] == "400.00"
 
     # Check job status is funded
-    resp = await client.get(f"/jobs/{job_id}")
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
     assert resp.json()["status"] == "funded"
 
 

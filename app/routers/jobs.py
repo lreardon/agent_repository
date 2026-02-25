@@ -31,10 +31,14 @@ async def propose_job(
 @router.get("/{job_id}", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def get_job(
     job_id: uuid.UUID,
+    auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
-    """Get job details."""
+    """Get job details. Only parties to the job can view it."""
     job = await job_service.get_job(db, job_id)
+    if auth.agent_id != job.client_agent_id and auth.agent_id != job.seller_agent_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not a party to this job")
     return JobResponse.model_validate(job)
 
 

@@ -235,7 +235,38 @@ async def test_deliver_and_fail_flow(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_job(client: AsyncClient) -> None:
+async def test_get_job_as_client(client: AsyncClient) -> None:
+    """Client can view their own job."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, _ = await _create_agent(client)
+
+    job = await _propose_job(client, client_id, client_priv, seller_id)
+    job_id = job["job_id"]
+
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["job_id"] == job_id
+
+
+@pytest.mark.asyncio
+async def test_get_job_as_seller(client: AsyncClient) -> None:
+    """Seller can view their own job."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    job = await _propose_job(client, client_id, client_priv, seller_id)
+    job_id = job["job_id"]
+
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["job_id"] == job_id
+
+
+@pytest.mark.asyncio
+async def test_get_job_unauthenticated(client: AsyncClient) -> None:
+    """Unauthenticated request to GET /jobs/{id} returns 403."""
     client_id, client_priv = await _create_agent(client)
     seller_id, _ = await _create_agent(client)
 
@@ -243,8 +274,22 @@ async def test_get_job(client: AsyncClient) -> None:
     job_id = job["job_id"]
 
     resp = await client.get(f"/jobs/{job_id}")
-    assert resp.status_code == 200
-    assert resp.json()["job_id"] == job_id
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_job_third_party_rejected(client: AsyncClient) -> None:
+    """Third party cannot view someone else's job."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, _ = await _create_agent(client)
+    intruder_id, intruder_priv = await _create_agent(client)
+
+    job = await _propose_job(client, client_id, client_priv, seller_id)
+    job_id = job["job_id"]
+
+    headers = make_auth_headers(intruder_id, intruder_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -478,8 +523,11 @@ async def test_third_party_cannot_dispute(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_job_not_found(client: AsyncClient) -> None:
-    """J12: 404 for nonexistent job."""
-    resp = await client.get("/jobs/00000000-0000-0000-0000-000000000000")
+    """J12: 404 for nonexistent job (with auth)."""
+    agent_id, priv = await _create_agent(client)
+    fake_job = "00000000-0000-0000-0000-000000000000"
+    headers = make_auth_headers(agent_id, priv, "GET", f"/jobs/{fake_job}")
+    resp = await client.get(f"/jobs/{fake_job}", headers=headers)
     assert resp.status_code == 404
 
 
@@ -738,7 +786,7 @@ async def test_seller_accept_no_criteria_no_hash_needed(client: AsyncClient) -> 
 @pytest.mark.asyncio
 async def test_result_redacted_in_delivered_state(client: AsyncClient) -> None:
     """RR1: Deliverable is not visible in delivered state (prevents free work extraction)."""
-    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
 
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
     await client.post(f"/jobs/{job_id}/start", headers=headers)
@@ -747,8 +795,9 @@ async def test_result_redacted_in_delivered_state(client: AsyncClient) -> None:
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", result)
     await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
 
-    # GET the job — result should be redacted
-    resp = await client.get(f"/jobs/{job_id}")
+    # GET the job as client — result should be redacted
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["status"] == "delivered"
     assert resp.json()["result"] is None
@@ -770,7 +819,8 @@ async def test_result_redacted_in_failed_state(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fail", b"")
     await client.post(f"/jobs/{job_id}/fail", headers=headers)
 
-    resp = await client.get(f"/jobs/{job_id}")
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
     assert resp.json()["status"] == "failed"
     assert resp.json()["result"] is None
 
@@ -790,6 +840,7 @@ async def test_result_visible_after_completion(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
     await client.post(f"/jobs/{job_id}/complete", headers=headers)
 
-    resp = await client.get(f"/jobs/{job_id}")
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
     assert resp.json()["status"] == "completed"
     assert resp.json()["result"]["output"] == "final deliverable"

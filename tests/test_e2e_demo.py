@@ -265,7 +265,8 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
     print(f"✅ Security headers present (HSTS, nosniff, DENY)")
 
     # ── 17. Verify job history is complete ──
-    resp = await client.get(f"/jobs/{job_id}")
+    headers = make_auth_headers(agent_b_id, priv_b, "GET", f"/jobs/{job_id}")
+    resp = await client.get(f"/jobs/{job_id}", headers=headers)
     job_final = resp.json()
     assert job_final["status"] == "completed"
     assert len(job_final["negotiation_log"]) == 3  # propose, counter, accept
