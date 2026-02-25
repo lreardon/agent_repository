@@ -17,7 +17,7 @@ from app.services.test_runner import run_test_suite, run_script_test
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-@router.post("", response_model=JobResponse, status_code=201)
+@router.post("", response_model=JobResponse, status_code=201, dependencies=[Depends(check_rate_limit)])
 async def propose_job(
     data: JobProposal,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -38,7 +38,7 @@ async def get_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/counter", response_model=JobResponse)
+@router.post("/{job_id}/counter", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def counter_job(
     job_id: uuid.UUID,
     data: CounterProposal,
@@ -50,7 +50,7 @@ async def counter_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/accept", response_model=JobResponse)
+@router.post("/{job_id}/accept", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def accept_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -61,7 +61,7 @@ async def accept_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/fund", response_model=EscrowResponse)
+@router.post("/{job_id}/fund", response_model=EscrowResponse, dependencies=[Depends(check_rate_limit)])
 async def fund_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -72,7 +72,7 @@ async def fund_job(
     return EscrowResponse.model_validate(escrow)
 
 
-@router.post("/{job_id}/complete", response_model=JobResponse)
+@router.post("/{job_id}/complete", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def complete_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -88,7 +88,7 @@ async def complete_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/start", response_model=JobResponse)
+@router.post("/{job_id}/start", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def start_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -99,7 +99,7 @@ async def start_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/deliver", response_model=JobResponse)
+@router.post("/{job_id}/deliver", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def deliver_job(
     job_id: uuid.UUID,
     data: DeliverPayload,
@@ -111,7 +111,7 @@ async def deliver_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/verify", response_model=VerifyResponse)
+@router.post("/{job_id}/verify", response_model=VerifyResponse, dependencies=[Depends(check_rate_limit)])
 async def verify_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -161,7 +161,7 @@ async def verify_job(
     )
 
 
-@router.post("/{job_id}/fail", response_model=JobResponse)
+@router.post("/{job_id}/fail", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def fail_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -172,7 +172,7 @@ async def fail_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/dispute", response_model=JobResponse)
+@router.post("/{job_id}/dispute", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def dispute_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),

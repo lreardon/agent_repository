@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.middleware import AuthenticatedAgent, verify_request
+from app.auth.rate_limit import check_rate_limit
 from app.config import settings
 from app.database import get_db
 from app.schemas.wallet import (
@@ -29,7 +30,7 @@ def _assert_own_agent(auth: AuthenticatedAgent, agent_id: uuid.UUID) -> None:
         raise HTTPException(status_code=403, detail="Can only access own wallet")
 
 
-@router.get("/deposit-address", response_model=DepositAddressResponse)
+@router.get("/deposit-address", response_model=DepositAddressResponse, dependencies=[Depends(check_rate_limit)])
 async def get_deposit_address(
     agent_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -47,7 +48,7 @@ async def get_deposit_address(
     )
 
 
-@router.post("/deposit-notify", response_model=DepositNotifyResponse, status_code=201)
+@router.post("/deposit-notify", response_model=DepositNotifyResponse, status_code=201, dependencies=[Depends(check_rate_limit)])
 async def notify_deposit(
     agent_id: uuid.UUID,
     data: DepositNotifyRequest,
@@ -82,7 +83,7 @@ async def notify_deposit(
     )
 
 
-@router.post("/withdraw", response_model=WithdrawalResponse, status_code=201)
+@router.post("/withdraw", response_model=WithdrawalResponse, status_code=201, dependencies=[Depends(check_rate_limit)])
 async def request_withdrawal(
     agent_id: uuid.UUID,
     data: WithdrawalCreateRequest,
@@ -97,7 +98,7 @@ async def request_withdrawal(
     return WithdrawalResponse.model_validate(withdrawal)
 
 
-@router.get("/transactions", response_model=TransactionHistoryResponse)
+@router.get("/transactions", response_model=TransactionHistoryResponse, dependencies=[Depends(check_rate_limit)])
 async def get_transactions(
     agent_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -113,7 +114,7 @@ async def get_transactions(
     )
 
 
-@router.get("/balance", response_model=AvailableBalanceResponse)
+@router.get("/balance", response_model=AvailableBalanceResponse, dependencies=[Depends(check_rate_limit)])
 async def get_available_balance(
     agent_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),

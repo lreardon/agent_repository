@@ -23,7 +23,7 @@ from app.services import review as review_service
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
-@router.post("", response_model=AgentResponse, status_code=201)
+@router.post("", response_model=AgentResponse, status_code=201, dependencies=[Depends(check_rate_limit)])
 async def register_agent(
     data: AgentCreate,
     db: AsyncSession = Depends(get_db),
@@ -44,7 +44,7 @@ async def get_agent(
     return AgentResponse.model_validate(agent)
 
 
-@router.patch("/{agent_id}", response_model=AgentResponse)
+@router.patch("/{agent_id}", response_model=AgentResponse, dependencies=[Depends(check_rate_limit)])
 async def update_agent(
     agent_id: uuid.UUID,
     data: AgentUpdate,
@@ -60,7 +60,7 @@ async def update_agent(
     return AgentResponse.model_validate(agent)
 
 
-@router.delete("/{agent_id}", status_code=204)
+@router.delete("/{agent_id}", status_code=204, dependencies=[Depends(check_rate_limit)])
 async def deactivate_agent(
     agent_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -122,7 +122,7 @@ from pydantic import BaseModel as _BaseModel
 class DevDepositRequest(_BaseModel):
     amount: str
 
-@router.post("/{agent_id}/deposit", response_model=BalanceResponse)
+@router.post("/{agent_id}/deposit", response_model=BalanceResponse, dependencies=[Depends(check_rate_limit)])
 async def dev_deposit(
     agent_id: uuid.UUID,
     data: DevDepositRequest,
