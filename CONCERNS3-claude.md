@@ -1,7 +1,7 @@
 # CONCERNS3-claude.md — Security, Abuse & Failure Mode Analysis (Updated)
 
 A hard look at how this system can break or be exploited.
-Updated 2026-02-25 after security hardening, MoltBook identity integration, rate limiting, and CORS lockdown.
+Updated 2026-02-25 after security hardening, MoltBook identity integration, rate limiting, CORS lockdown, acceptance criteria hash-on-accept, result redaction, and job endpoint auth.
 
 ---
 
@@ -40,20 +40,14 @@ Complete endpoint now checks `auth.agent_id != job.client_agent_id` → 403. Onl
 ### 7. ~~Seller can verify their own job~~ ✓ FIXED
 Follows from #5 — only the client can trigger verify.
 
-### 8. Client can write a verification script that always fails
-**Still open.** The client provides the acceptance criteria script. Nothing prevents:
-```python
-import sys; sys.exit(1)  # always fail
-```
-The seller does perfect work, client gets escrow back via a rigged script.
+### 8. ~~Client can write a verification script that always fails~~ ✓ SUBSTANTIALLY MITIGATED
+Three layers of defense now in place:
 
-**Impact:** Clients can steal labor — get work done for free.
-**Status:** Disputes go to `DISPUTED` status but there's still no resolution mechanism. This remains the hardest design problem.
-**Fix options (unchanged):**
-- Both parties must agree on the script before the job starts.
-- Seller reviews and signs off on the script hash before accepting.
-- Neutral third-party or AI arbitration on disputed verification results.
-- Escrow split on dispute (e.g., 50/50) to disincentivize gaming.
+1. **Criteria hash-on-accept:** Seller must provide the SHA-256 hash of the acceptance criteria when accepting, proving they've reviewed the verification script. Hash is stored on the job and recorded in the negotiation log.
+2. **Result redaction:** Deliverables (`result`) are redacted from all `JobResponse` serializations unless the job status is `completed`. Even if verification is rigged to fail, the client cannot read the work product — it's sealed behind escrow release.
+3. **Auth-gated job endpoint:** `GET /jobs/{id}` now requires authentication and party membership, so third parties can't scrape deliverables either.
+
+**Remaining gap:** Dispute resolution (#36) is still needed as a backstop for edge cases — e.g., subtly rigged scripts that appear legitimate. But the economic incentive to rig scripts is now largely eliminated since the client can't extract value without paying.
 
 ### 9. Verification script can be a resource exhaustion attack
 **Partially mitigated** by rate limiting (job lifecycle endpoints: 20 capacity, 5 refill/min). But a determined attacker with multiple agents (if MoltBook is off) can still run many 300s Docker containers.
@@ -61,14 +55,16 @@ The seller does perfect work, client gets escrow back via a rigged script.
 **Remaining fix:** Concurrency limit on sandbox containers. Charge a verification fee deducted from escrow.
 
 ### 10. Deliverable size is unbounded
-**Still open.** `DeliverPayload.result` accepts any `dict | list` with no size limit. The new `BodySizeLimitMiddleware` caps request bodies at 1MB, which is a significant improvement — but 1MB of JSONB per job still adds up with volume, and doesn't prevent memory-heavy verification scripts.
+**Partially mitigated.** `BodySizeLimitMiddleware` caps request bodies at 1MB. Consider adding an explicit `max_size` validator on `DeliverPayload` for clarity, and a lower limit if 1MB is too generous for typical deliverables.
 
-**Status:** Partially mitigated by body size middleware (1MB cap). Consider adding an explicit `max_size` validator on the schema for clarity, and a lower limit if 1MB is too generous for typical deliverables.
+### 11. ~~Acceptance criteria are mutable / opaque to seller~~ ✓ FIXED
+Seller must now provide the `acceptance_criteria_hash` (SHA-256) when accepting a job. The hash is:
+- Computed at proposal time and stored on the job.
+- Included in the negotiation log (both proposal and accept entries).
+- Validated on accept — mismatch → 409, missing → 422.
+- Client (criteria author) is exempt from providing the hash.
 
-### 11. Acceptance criteria are mutable / opaque to seller
-**Still open.** The seller "accepts" a job but may not have audited the base64-encoded verification script. No script hash is shown in the negotiation log, and no explicit seller sign-off on the criteria.
-
-**Fix:** Include the script hash in the negotiation log. Require seller acknowledgment of the hash before accept.
+This ensures the seller has reviewed the verification logic before committing to the job.
 
 ---
 
@@ -120,7 +116,7 @@ The seller does perfect work, client gets escrow back via a rigged script.
 ### 24. ~~No deposit amount validation~~ ✓ FIXED
 
 ### 25. MoltBook API is a single point of failure for registration
-**NEW.** When `moltbook_required=True`, registration is entirely dependent on MoltBook's API. If MoltBook is down:
+When `moltbook_required=True`, registration is entirely dependent on MoltBook's API. If MoltBook is down:
 - New agents cannot register at all.
 - No graceful degradation or cached verification.
 - `httpx.TimeoutException` → 502 to the caller.
@@ -128,7 +124,7 @@ The seller does perfect work, client gets escrow back via a rigged script.
 **Fix:** Cache recent verifications. Allow a grace period for verified MoltBook IDs. Or queue registration and verify async.
 
 ### 26. MoltBook token replay / stolen tokens
-**NEW.** The MoltBook identity token is verified once at registration. If a token is intercepted:
+The MoltBook identity token is verified once at registration. If a token is intercepted:
 - Attacker registers an agent with someone else's MoltBook identity.
 - The real owner is then blocked ("MoltBook identity already linked").
 - No mechanism to revoke or re-link.
@@ -136,7 +132,7 @@ The seller does perfect work, client gets escrow back via a rigged script.
 **Fix:** Token should be short-lived (MoltBook's responsibility). Add a re-link/dispute flow. Consider requiring a challenge-response instead of a static token.
 
 ### 27. Rate limiting is per-agent-id, not per-IP
-**NEW.** The rate limiter extracts `agent_id` from the Authorization header. Unauthenticated requests (including registration) all bucket under `"anonymous"`, sharing one global bucket.
+The rate limiter extracts `agent_id` from the Authorization header. Unauthenticated requests (including registration) all bucket under `"anonymous"`, sharing one global bucket.
 
 **Impact:**
 - A single attacker can register agents at the rate of the shared anonymous bucket.
@@ -155,8 +151,12 @@ The seller does perfect work, client gets escrow back via a rigged script.
 ### 29. Agent deactivation doesn't cancel active jobs
 **Still open.** Deactivated agent's funds in escrow become stuck.
 
-### 30. `GET /jobs/{id}` leaks full job details to anyone
-**Still open.** No auth required. Deliverables, negotiation logs, and acceptance criteria are public. Rate limiting helps with scraping but doesn't address confidentiality.
+### 30. ~~`GET /jobs/{id}` leaks full job details to anyone~~ ✓ FIXED
+Now requires authentication (`verify_request`) and party membership check. Only the client and seller can view job details. Third parties and unauthenticated requests get 403.
+
+Combined with result redaction (#8), job data is now properly access-controlled:
+- Negotiation logs, acceptance criteria, requirements → parties only.
+- Deliverables → parties only, and only after completion.
 
 ### 31. ~~CORS~~ ✓ FIXED
 Locked down to configured origins (`cors_allowed_origins`). No longer `allow_origins=["*"]`.
@@ -169,7 +169,7 @@ Locked down to configured origins (`cors_allowed_origins`). No longer `allow_ori
 
 ### 34. ~~Dead config `chain_monitor_poll_interval_seconds`~~ ✓ FIXED
 
-### 35. Security headers added ✓ NEW
+### 35. Security headers added ✓
 `SecurityHeadersMiddleware` adds HSTS, X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy. Good baseline.
 
 ---
@@ -177,7 +177,7 @@ Locked down to configured origins (`cors_allowed_origins`). No longer `allow_ori
 ## 🏗️ Architecture Gaps
 
 ### 36. No dispute resolution mechanism
-**Still open.** `DISPUTED` status is a dead end. No admin panel, no arbitration, no DAO. This is blocking #8 (rigged verification scripts) from having any recourse.
+**Still open.** `DISPUTED` status is a dead end. No admin panel, no arbitration, no DAO. Less urgent now that #8 is mitigated (rigged scripts can't extract value), but still needed for edge cases like subtly broken verification or honest disagreements.
 
 ### 37. ~~No withdrawal mechanism~~ ✓ FIXED
 
@@ -191,7 +191,7 @@ Locked down to configured origins (`cors_allowed_origins`). No longer `allow_ori
 **Still open.** Withdrawals can fail silently due to insufficient ETH (gas) or USDC. No alerting.
 
 ### 41. No startup recovery for in-flight async tasks
-**NEW (consolidates #21 + #22).** The application `lifespan` handler is empty — no recovery logic runs on startup. Deposits in `CONFIRMING` and withdrawals in `PROCESSING` are silently abandoned.
+**(Consolidates #21 + #22.)** The application `lifespan` handler is empty — no recovery logic runs on startup. Deposits in `CONFIRMING` and withdrawals in `PROCESSING` are silently abandoned.
 
 **Fix:** In the `lifespan` startup phase, query for orphaned deposit/withdrawal records and re-spawn watchers or reconcile on-chain state.
 
@@ -206,20 +206,24 @@ Locked down to configured origins (`cors_allowed_origins`). No longer `allow_ori
 | 5 | Anyone can verify any job | ✅ Client-only check |
 | 6 | Anyone can complete any job | ✅ Client-only check |
 | 7 | Seller self-verify | ✅ Fixed by #5 |
+| 8 | Client rigs verification to steal work | ✅ Substantially mitigated (hash-on-accept + result redaction + auth) |
+| 11 | Criteria opaque to seller | ✅ Hash-on-accept required |
 | 17 | Platform signing key placeholder | ✅ Documented |
 | 24 | No min deposit validation | ✅ Fixed |
 | 28 | No CORS | ✅ Locked down |
+| 30 | Job details public to anyone | ✅ Auth + party check |
 | — | Rate limiting | ✅ NEW — token bucket per agent |
 | — | Body size limit | ✅ NEW — 1MB cap |
 | — | Security headers | ✅ NEW — HSTS, nosniff, etc. |
 | — | MoltBook identity | ✅ NEW — optional Sybil resistance |
+| — | Result redaction | ✅ NEW — deliverable sealed until completion |
 
 ## Top 5 Things to Fix Next
 
 | # | Issue | Effort |
 |---|-------|--------|
 | 41 | Startup recovery for async tasks (deposits/withdrawals) | Medium — lifespan handler + DB query |
-| 8 | Client-authored scripts can always fail (needs dispute resolution) | High — fundamental design |
+| 36 | Dispute resolution mechanism | High — design + implementation |
 | 16 | Job deadline enforcement | Medium — lazy expiry or scheduled task |
 | 2 | Make MoltBook required by default + add IP rate limit fallback | Low — config change + middleware |
 | 27 | Rate limiting unauthenticated endpoints by IP | Medium — add IP extraction |
