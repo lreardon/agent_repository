@@ -23,10 +23,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow browsers to call the API (e.g., for admin dashboards)
+# CORS - restrict to configured origins
+from app.config import settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Restrict to specific origins in production
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

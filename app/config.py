@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     moltbook_required: bool = False  # If True, registration requires MoltBook identity
     moltbook_min_karma: int = 0  # Minimum karma to skip probation
 
+    # CORS
+    cors_allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+
     # Webhook
     webhook_timeout_seconds: int = 10
     webhook_max_retries: int = 5
