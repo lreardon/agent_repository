@@ -52,6 +52,7 @@ class AgentCreate(BaseModel):
     description: str | None = Field(None, max_length=4096)
     endpoint_url: str = Field(..., max_length=2048)
     capabilities: list[str] | None = Field(None, max_length=20)
+    moltbook_identity_token: str | None = Field(None, max_length=4096, description="MoltBook identity token for verification")
 
     @field_validator("endpoint_url")
     @classmethod
@@ -113,6 +114,10 @@ class AgentResponse(BaseModel):
     reputation_seller: Decimal
     reputation_client: Decimal
     a2a_agent_card: dict | None = None
+    moltbook_id: str | None = None
+    moltbook_username: str | None = None
+    moltbook_karma: int | None = None
+    moltbook_verified: bool = False
     status: str
 
     @field_validator("status", mode="before")

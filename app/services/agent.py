@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.agent import Agent, AgentStatus
 from app.schemas.agent import AgentCreate, AgentUpdate
 from app.services.agent_card import (
@@ -49,6 +50,29 @@ async def register_agent(
         except AgentCardError as e:
             raise HTTPException(status_code=422, detail=f"Agent Card validation failed: {e}")
 
+    # MoltBook identity verification
+    moltbook_profile = None
+    if data.moltbook_identity_token:
+        from app.services.moltbook import verify_identity_token
+
+        moltbook_profile = await verify_identity_token(data.moltbook_identity_token)
+
+        # Check if this MoltBook identity is already registered
+        existing = await db.execute(
+            select(Agent).where(Agent.moltbook_id == moltbook_profile.moltbook_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="This MoltBook identity is already linked to an agent",
+            )
+    elif settings.moltbook_required:
+        raise HTTPException(
+            status_code=422,
+            detail="MoltBook identity token is required for registration. "
+                   "Get one at: https://moltbook.com/auth.md?app=agent-registry",
+        )
+
     webhook_secret = secrets.token_hex(32)
     agent = Agent(
         agent_id=uuid.uuid4(),
@@ -59,10 +83,22 @@ async def register_agent(
         capabilities=capabilities,
         a2a_agent_card=a2a_card,
         webhook_secret=webhook_secret,
+        moltbook_id=moltbook_profile.moltbook_id if moltbook_profile else None,
+        moltbook_username=moltbook_profile.username if moltbook_profile else None,
+        moltbook_karma=moltbook_profile.karma if moltbook_profile else None,
+        moltbook_verified=moltbook_profile.verified if moltbook_profile else False,
     )
     db.add(agent)
     await db.commit()
     await db.refresh(agent)
+
+    if moltbook_profile:
+        logger.info(
+            "Agent %s registered with MoltBook identity: @%s (karma=%d, verified=%s)",
+            agent.agent_id, moltbook_profile.username,
+            moltbook_profile.karma, moltbook_profile.verified,
+        )
+
     return agent
 
 

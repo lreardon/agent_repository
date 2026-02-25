@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import ARRAY, DateTime, Enum, Numeric, String, Text, Uuid
+from sqlalchemy import ARRAY, Boolean, DateTime, Enum, Integer, Numeric, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -54,4 +54,18 @@ class Agent(Base):
     a2a_agent_card: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     last_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    # MoltBook identity
+    moltbook_id: Mapped[str | None] = mapped_column(
+        String(128), unique=True, nullable=True
+    )
+    moltbook_username: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    moltbook_karma: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    moltbook_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )

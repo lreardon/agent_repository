@@ -78,7 +78,11 @@ async def complete_job(
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
-    """Complete job — release escrow to seller (after verification)."""
+    """Complete job — release escrow to seller (after verification). Client only."""
+    from fastapi import HTTPException as HTTPExc
+    job = await job_service.get_job(db, job_id)
+    if auth.agent_id != job.client_agent_id:
+        raise HTTPExc(status_code=403, detail="Only the client can complete a job")
     escrow = await escrow_service.release_escrow(db, job_id)
     job = await job_service.get_job(db, job_id)
     return JobResponse.model_validate(job)
@@ -116,6 +120,9 @@ async def verify_job(
     """Run acceptance tests on delivered job. Auto-completes or fails."""
     from fastapi import HTTPException as HTTPExc
     job = await job_service.get_job(db, job_id)
+
+    if auth.agent_id != job.client_agent_id:
+        raise HTTPExc(status_code=403, detail="Only the client can trigger verification")
 
     if job.status.value != "delivered":
         raise HTTPExc(status_code=409, detail=f"Job must be delivered to verify, currently {job.status.value}")

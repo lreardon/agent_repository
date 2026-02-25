@@ -16,10 +16,11 @@ async def _create_agent(client: AsyncClient) -> tuple[str, str]:
 
 
 async def _deposit(client: AsyncClient, agent_id: str, priv: str, amount: str) -> None:
+    """Credit agent balance via dev-only deposit endpoint."""
     data = {"amount": amount}
-    body = data
-    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", body)
-    await client.post(f"/agents/{agent_id}/deposit", json=data, headers=headers)
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", data)
+    resp = await client.post(f"/agents/{agent_id}/deposit", json=data, headers=headers)
+    assert resp.status_code == 200, f"Dev deposit failed: {resp.status_code} {resp.text}"
 
 
 async def _setup_funded_job(
@@ -185,3 +186,67 @@ async def test_verify_majority_threshold(client: AsyncClient) -> None:
     assert body["job"]["status"] == "completed"  # 2/3 pass with majority threshold
     assert body["verification"]["passed"] is True
     assert body["verification"]["summary"] == "2/3 passed"
+
+
+@pytest.mark.asyncio
+async def test_verify_rejects_non_client(client: AsyncClient) -> None:
+    """Only the client (buyer) can trigger verification."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    outsider_id, outsider_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "200.00")
+
+    job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
+
+    # Deliver
+    deliver_data = {"result": {"output": "done"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+
+    # Seller tries to verify — should be 403
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/verify", b"")
+    resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
+    assert resp.status_code == 403
+
+    # Random outsider tries to verify — should be 403
+    headers = make_auth_headers(outsider_id, outsider_priv, "POST", f"/jobs/{job_id}/verify", b"")
+    resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
+    assert resp.status_code == 403
+
+    # Client can verify — should succeed
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/verify", b"")
+    resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_complete_rejects_non_client(client: AsyncClient) -> None:
+    """Only the client (buyer) can complete a job."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    outsider_id, outsider_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "200.00")
+
+    job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
+
+    # Deliver
+    deliver_data = {"result": {"output": "done"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+
+    # Seller tries to complete — should be 403
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 403
+
+    # Random outsider tries to complete — should be 403
+    headers = make_auth_headers(outsider_id, outsider_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 403
+
+    # Client can complete — should succeed
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 200

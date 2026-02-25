@@ -6,6 +6,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
@@ -113,6 +114,26 @@ async def get_balance(
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Can only view own balance")
     agent = await agent_service.get_balance(db, agent_id)
+    return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
+
+
+from pydantic import BaseModel as _BaseModel
+
+class DevDepositRequest(_BaseModel):
+    amount: str
+
+@router.post("/{agent_id}/deposit", response_model=BalanceResponse)
+async def dev_deposit(
+    agent_id: uuid.UUID,
+    data: DevDepositRequest,
+    auth: AuthenticatedAgent = Depends(verify_request),
+    db: AsyncSession = Depends(get_db),
+) -> BalanceResponse:
+    """Dev-only: credit agent balance directly. Not available in production."""
+    from fastapi import HTTPException
+    if settings.env == "production":
+        raise HTTPException(status_code=403, detail="Direct deposit not available in production")
+    agent = await agent_service.deposit(db, agent_id, Decimal(data.amount))
     return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
 
 

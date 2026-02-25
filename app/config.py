@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry"
     test_database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry_test"
     redis_url: str = "redis://localhost:6379/0"
-    platform_signing_key: str = "dev-signing-key-not-for-production"
+    platform_signing_key: str = "dev-signing-key-not-for-production"  # ⚠️ ROTATE BEFORE PRODUCTION
     platform_fee_percent: Decimal = Decimal("0.025")
 
     # Rate limiting defaults
@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     max_withdrawal_amount: Decimal = Decimal("100000.00")
     withdrawal_flat_fee: Decimal = Decimal("0.50")  # Covers L2 gas
     deposit_confirmations_required: int = 12
-    chain_monitor_poll_interval_seconds: int = 15
 
     @property
     def resolved_rpc_url(self) -> str:
@@ -60,6 +59,12 @@ class Settings(BaseSettings):
     @property
     def chain_id(self) -> int:
         return {"base_sepolia": 84532, "base_mainnet": 8453}[self.blockchain_network]
+
+    # MoltBook Identity
+    moltbook_api_key: str = ""  # Developer API key (moltdev_...)
+    moltbook_api_url: str = "https://moltbook.com/api/v1"
+    moltbook_required: bool = False  # If True, registration requires MoltBook identity
+    moltbook_min_karma: int = 0  # Minimum karma to skip probation
 
     # Webhook
     webhook_timeout_seconds: int = 10

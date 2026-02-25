@@ -349,7 +349,7 @@ async def credit_deposit(db: AsyncSession, deposit_tx_id: uuid.UUID) -> None:
     if deposit.status == DepositStatus.CREDITED:
         return  # Idempotent
 
-    if deposit.amount_credits < settings.min_deposit_amount:
+    # Minimum amount already validated at registration time in verify_deposit_tx
         logger.warning(
             "Deposit %s below minimum ($%s < $%s) — marking failed",
             deposit_tx_id, deposit.amount_credits, settings.min_deposit_amount,
@@ -436,6 +436,13 @@ async def verify_deposit_tx(
 
     raw_amount = matched.args["value"]
     credits = _usdc_to_credits(raw_amount)
+
+    # Validate minimum deposit amount immediately (not at credit time)
+    if credits < settings.min_deposit_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Deposit amount ${credits} is below minimum of ${settings.min_deposit_amount}",
+        )
 
     deposit_tx = DepositTransaction(
         deposit_tx_id=uuid.uuid4(),
