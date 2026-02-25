@@ -349,7 +349,8 @@ async def credit_deposit(db: AsyncSession, deposit_tx_id: uuid.UUID) -> None:
     if deposit.status == DepositStatus.CREDITED:
         return  # Idempotent
 
-    # Minimum amount already validated at registration time in verify_deposit_tx
+    # Defense-in-depth: reject under-minimum deposits even if verify_deposit_tx already checks
+    if deposit.amount_credits < settings.min_deposit_amount:
         logger.warning(
             "Deposit %s below minimum ($%s < $%s) — marking failed",
             deposit_tx_id, deposit.amount_credits, settings.min_deposit_amount,
