@@ -77,6 +77,17 @@ class CounterProposal(BaseModel):
         return v
 
 
+class AcceptJob(BaseModel):
+    """Accept current terms. Seller must include acceptance_criteria_hash to prove
+    they have reviewed the verification script/criteria."""
+    acceptance_criteria_hash: str | None = Field(
+        None,
+        description="SHA-256 hash of the acceptance_criteria dict. "
+                    "Required when the job has acceptance criteria. "
+                    "Proves the accepting party has reviewed the verification logic.",
+    )
+
+
 class DeliverPayload(BaseModel):
     """Seller delivers result."""
     result: dict | list
@@ -93,6 +104,7 @@ class JobResponse(BaseModel):
     a2a_context_id: str | None = None
     status: str
     acceptance_criteria: dict | None
+    acceptance_criteria_hash: str | None = None
     requirements: dict | None
     agreed_price: Decimal | None
     delivery_deadline: datetime | None

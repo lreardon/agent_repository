@@ -5,7 +5,7 @@ import json
 import pytest
 from httpx import AsyncClient
 
-from app.utils.crypto import generate_keypair
+from app.utils.crypto import generate_keypair, hash_criteria
 from tests.conftest import make_agent_data, make_auth_headers
 
 
@@ -41,9 +41,11 @@ async def _setup_funded_job(
     resp = await client.post("/jobs", json=data, headers=headers)
     job_id = resp.json()["job_id"]
 
-    # Accept
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
-    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    # Accept (seller provides criteria hash)
+    used_criteria = criteria or {"version": "1.0", "tests": []}
+    accept_data = {"acceptance_criteria_hash": hash_criteria(used_criteria)}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
+    await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
 
     # Fund
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")

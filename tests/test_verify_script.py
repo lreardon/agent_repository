@@ -11,7 +11,7 @@ import shutil
 import pytest
 from httpx import AsyncClient
 
-from app.utils.crypto import generate_keypair
+from app.utils.crypto import generate_keypair, hash_criteria
 from tests.conftest import make_agent_data, make_auth_headers
 
 
@@ -27,17 +27,19 @@ _docker = pytest.mark.skipif(
 async def _create_agent(client: AsyncClient) -> tuple[str, str]:
     priv, pub = generate_keypair()
     resp = await client.post("/agents", json=make_agent_data(pub))
+    assert resp.status_code == 201
     return resp.json()["agent_id"], priv
 
 
 async def _deposit(client: AsyncClient, agent_id: str, priv: str, amount: str) -> None:
     body_bytes = json.dumps({"amount": amount}).encode()
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", body_bytes)
-    await client.post(
+    resp = await client.post(
         f"/agents/{agent_id}/deposit",
         content=body_bytes,
         headers={**headers, "Content-Type": "application/json"},
     )
+    assert resp.status_code == 200
 
 
 async def _setup_funded_job(
@@ -63,17 +65,21 @@ async def _setup_funded_job(
     assert resp.status_code == 201, f"Job creation failed: {resp.text}"
     job_id = resp.json()["job_id"]
 
-    # Accept
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
-    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    # Accept (seller provides criteria hash)
+    accept_data = {"acceptance_criteria_hash": hash_criteria(criteria)}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
+    resp = await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
+    assert resp.status_code == 200
 
     # Fund
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
-    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    assert resp.status_code == 200
 
     # Start
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
-    await client.post(f"/jobs/{job_id}/start", headers=headers)
+    resp = await client.post(f"/jobs/{job_id}/start", headers=headers)
+    assert resp.status_code == 200
 
     return job_id
 

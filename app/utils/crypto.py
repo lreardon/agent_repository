@@ -66,6 +66,19 @@ def generate_nonce() -> str:
     return secrets.token_hex(16)
 
 
+def hash_criteria(criteria: dict | None) -> str | None:
+    """Compute a canonical SHA-256 hash of acceptance criteria.
+
+    Returns None if criteria is None. The dict is serialized with sorted keys
+    and no whitespace to ensure deterministic hashing.
+    """
+    if criteria is None:
+        return None
+    import json
+    canonical = json.dumps(criteria, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def is_timestamp_valid(timestamp: str, max_age_seconds: int = 30) -> bool:
     """Check if a timestamp is within the allowed window."""
     try:

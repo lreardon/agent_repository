@@ -17,7 +17,7 @@ from app.models.wallet import (
     WithdrawalRequest,
     WithdrawalStatus,
 )
-from app.utils.crypto import generate_keypair
+from app.utils.crypto import generate_keypair, hash_criteria
 from tests.conftest import make_agent_data, make_auth_headers
 
 
@@ -277,9 +277,11 @@ async def test_withdrawal_then_fund_job_insufficient(client: AsyncClient) -> Non
     assert resp.status_code == 201
     job_id = resp.json()["job_id"]
 
-    # Seller accepts
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
-    resp = await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    # Seller accepts (must provide criteria hash)
+    _criteria = {"version": "1.0", "tests": []}
+    accept_data = {"acceptance_criteria_hash": hash_criteria(_criteria)}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
+    resp = await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
     assert resp.status_code == 200
 
     # Fund should fail — insufficient balance
@@ -307,8 +309,10 @@ async def test_fund_job_then_withdraw_insufficient(client: AsyncClient) -> None:
     resp = await client.post("/jobs", json=job_data, headers=headers)
     job_id = resp.json()["job_id"]
 
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
-    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    _criteria = {"version": "1.0", "tests": []}
+    accept_data = {"acceptance_criteria_hash": hash_criteria(_criteria)}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
+    await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
 
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
     resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
@@ -596,3 +600,19 @@ async def test_deposit_blocked_in_production(client: AsyncClient) -> None:
 
     assert resp.status_code == 403
     assert "production" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Additional wallet tests (W6, W7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_transaction_history_empty(client: AsyncClient) -> None:
+    """W7: Transaction history with no deposits/withdrawals returns empty lists."""
+    agent_id, priv = await _create_agent(client)
+    headers = make_auth_headers(agent_id, priv, "GET", f"/agents/{agent_id}/wallet/transactions")
+    resp = await client.get(f"/agents/{agent_id}/wallet/transactions", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["deposits"] == []
+    assert resp.json()["withdrawals"] == []

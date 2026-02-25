@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
-from app.schemas.job import CounterProposal, DeliverPayload, JobProposal, JobResponse, VerifyResponse
+from app.schemas.job import AcceptJob, CounterProposal, DeliverPayload, JobProposal, JobResponse, VerifyResponse
 from app.schemas.escrow import EscrowResponse
 from app.services import escrow as escrow_service
 from app.services import job as job_service
@@ -53,11 +53,12 @@ async def counter_job(
 @router.post("/{job_id}/accept", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
 async def accept_job(
     job_id: uuid.UUID,
+    data: AcceptJob | None = None,
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
-    """Accept current terms."""
-    job = await job_service.accept_job(db, job_id, auth.agent_id)
+    """Accept current terms. Seller must include acceptance_criteria_hash."""
+    job = await job_service.accept_job(db, job_id, auth.agent_id, data)
     return JobResponse.model_validate(job)
 
 

@@ -67,6 +67,7 @@ class Job(Base):
         default=JobStatus.PROPOSED,
     )
     acceptance_criteria: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    acceptance_criteria_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     requirements: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     agreed_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     delivery_deadline: Mapped[datetime | None] = mapped_column(

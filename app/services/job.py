@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent, AgentStatus
 from app.models.job import Job, JobStatus, VALID_TRANSITIONS
-from app.schemas.job import CounterProposal, JobProposal
+from app.schemas.job import AcceptJob, CounterProposal, JobProposal
+from app.utils.crypto import hash_criteria
 
 
 def _assert_transition(current: JobStatus, target: JobStatus) -> None:
@@ -58,12 +59,15 @@ async def propose_job(
     if client_agent_id == data.seller_agent_id:
         raise HTTPException(status_code=422, detail="Cannot propose a job to yourself")
 
+    criteria_hash = hash_criteria(data.acceptance_criteria)
+
     initial_log = [{
         "round": 0,
         "proposer": str(client_agent_id),
         "proposed_price": str(data.max_budget),
         "requirements": data.requirements,
         "acceptance_criteria": data.acceptance_criteria,
+        "acceptance_criteria_hash": criteria_hash,
         "timestamp": datetime.now(UTC).isoformat(),
     }]
 
@@ -74,6 +78,7 @@ async def propose_job(
         listing_id=data.listing_id,
         status=JobStatus.PROPOSED,
         acceptance_criteria=data.acceptance_criteria,
+        acceptance_criteria_hash=criteria_hash,
         requirements=data.requirements,
         agreed_price=data.max_budget,
         delivery_deadline=data.delivery_deadline,
@@ -127,18 +132,44 @@ async def counter_job(
 
 
 async def accept_job(
-    db: AsyncSession, job_id: uuid.UUID, agent_id: uuid.UUID
+    db: AsyncSession, job_id: uuid.UUID, agent_id: uuid.UUID,
+    data: AcceptJob | None = None,
 ) -> Job:
-    """Either party accepts current terms."""
+    """Either party accepts current terms.
+
+    When acceptance criteria exist, the accepting party must provide the
+    criteria hash to prove they have reviewed the verification logic.
+    The client (who authored the criteria) is exempt from this requirement.
+    """
     job = await _get_job(db, job_id)
     _assert_party(job, agent_id)
     _assert_transition(job.status, JobStatus.AGREED)
+
+    # Seller must confirm they've reviewed the acceptance criteria
+    is_seller = agent_id == job.seller_agent_id
+    if is_seller and job.acceptance_criteria is not None:
+        provided_hash = data.acceptance_criteria_hash if data else None
+        if not provided_hash:
+            raise HTTPException(
+                status_code=422,
+                detail="Seller must provide acceptance_criteria_hash to confirm "
+                       "review of the verification criteria before accepting. "
+                       f"Expected hash: review the criteria and provide its SHA-256 hash.",
+            )
+        if provided_hash != job.acceptance_criteria_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="acceptance_criteria_hash mismatch. The criteria may have "
+                       "changed. Please review the current acceptance_criteria "
+                       "and provide the correct hash.",
+            )
 
     job.status = JobStatus.AGREED
     log_entry = {
         "action": "accepted",
         "by": str(agent_id),
         "agreed_price": str(job.agreed_price),
+        "acceptance_criteria_hash": job.acceptance_criteria_hash,
         "timestamp": datetime.now(UTC).isoformat(),
     }
     job.negotiation_log = [*(job.negotiation_log or []), log_entry]
