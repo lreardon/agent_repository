@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class JobProposal(BaseModel):
@@ -121,6 +121,18 @@ class JobResponse(BaseModel):
         if hasattr(v, "value"):
             return v.value
         return str(v)
+
+    @model_validator(mode="after")
+    def redact_result_unless_completed(self) -> "JobResponse":
+        """Redact deliverable from responses unless the job is completed.
+
+        Prevents clients from extracting work product without paying —
+        e.g. proposing a rigged verification script, letting it fail,
+        and reading the result from the job response.
+        """
+        if self.status != "completed":
+            self.result = None
+        return self
 
 
 class TestResultItem(BaseModel):

@@ -364,7 +364,8 @@ async def test_deliver_job(client: AsyncClient) -> None:
     resp = await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["status"] == "delivered"
-    assert resp.json()["result"]["output"] == "done"
+    # Result is redacted in non-completed states to prevent free work extraction
+    assert resp.json()["result"] is None
 
 
 @pytest.mark.asyncio
@@ -548,6 +549,8 @@ async def test_full_lifecycle_propose_to_complete(client: AsyncClient) -> None:
     resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["status"] == "completed"
+    # Result is only visible after completion
+    assert resp.json()["result"]["output"] == "all done"
 
     # Verify seller got paid (minus 2.5% fee): 100 * 0.975 = 97.50
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
@@ -725,3 +728,68 @@ async def test_seller_accept_no_criteria_no_hash_needed(client: AsyncClient) -> 
     resp = await client.post(f"/jobs/{job_id}/accept", headers=headers)
     assert resp.status_code == 200
     assert resp.json()["status"] == "agreed"
+
+
+# ---------------------------------------------------------------------------
+# Result redaction tests (RR1-RR3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_result_redacted_in_delivered_state(client: AsyncClient) -> None:
+    """RR1: Deliverable is not visible in delivered state (prevents free work extraction)."""
+    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    result = {"result": {"output": "valuable work product"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", result)
+    await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
+
+    # GET the job — result should be redacted
+    resp = await client.get(f"/jobs/{job_id}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "delivered"
+    assert resp.json()["result"] is None
+
+
+@pytest.mark.asyncio
+async def test_result_redacted_in_failed_state(client: AsyncClient) -> None:
+    """RR2: Deliverable is not visible after verification failure."""
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    result = {"result": {"output": "good work"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", result)
+    await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
+
+    # Fail the job
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    await client.post(f"/jobs/{job_id}/fail", headers=headers)
+
+    resp = await client.get(f"/jobs/{job_id}")
+    assert resp.json()["status"] == "failed"
+    assert resp.json()["result"] is None
+
+
+@pytest.mark.asyncio
+async def test_result_visible_after_completion(client: AsyncClient) -> None:
+    """RR3: Deliverable IS visible once job is completed and escrow released."""
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    result = {"result": {"output": "final deliverable"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", result)
+    await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
+
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    await client.post(f"/jobs/{job_id}/complete", headers=headers)
+
+    resp = await client.get(f"/jobs/{job_id}")
+    assert resp.json()["status"] == "completed"
+    assert resp.json()["result"]["output"] == "final deliverable"
