@@ -15,26 +15,26 @@ logger = logging.getLogger(__name__)
 
 async def _recover_wallet_tasks() -> None:
     """Re-spawn confirmation/processing tasks for in-flight deposits and withdrawals."""
-    from app.database import async_session_factory
-    from app.models.wallet import WalletDeposit, WalletWithdrawal
-    from app.services.wallet import _watch_deposit_confirmations, _process_withdrawal
+    from app.database import async_session
+    from app.models.wallet import DepositTransaction, DepositStatus, WithdrawalRequest, WithdrawalStatus
+    from app.services.wallet import _wait_and_credit_deposit, _process_withdrawal
     from sqlalchemy import select
 
     try:
-        async with async_session_factory() as db:
+        async with async_session() as db:
             # Recover confirming deposits
             result = await db.execute(
-                select(WalletDeposit).where(WalletDeposit.status == "confirming")
+                select(DepositTransaction).where(DepositTransaction.status == DepositStatus.CONFIRMING)
             )
             deposits = list(result.scalars().all())
             for dep in deposits:
-                logger.info("Recovering confirming deposit %s (tx: %s)", dep.deposit_id, dep.tx_hash)
-                asyncio.create_task(_watch_deposit_confirmations(dep.deposit_id, dep.tx_hash))
+                logger.info("Recovering confirming deposit %s (block: %s)", dep.deposit_tx_id, dep.block_number)
+                asyncio.create_task(_wait_and_credit_deposit(dep.deposit_tx_id, dep.block_number))
 
             # Recover pending/processing withdrawals
             result = await db.execute(
-                select(WalletWithdrawal).where(
-                    WalletWithdrawal.status.in_(["pending", "processing"])
+                select(WithdrawalRequest).where(
+                    WithdrawalRequest.status.in_([WithdrawalStatus.PENDING, WithdrawalStatus.PROCESSING])
                 )
             )
             withdrawals = list(result.scalars().all())
