@@ -49,6 +49,13 @@ def _get_rate_config(method: str, path: str) -> tuple[int, int, str]:
             settings.rate_limit_discovery_refill_per_min,
             "discovery",
         )
+    # Registration endpoint gets its own tight limit (per-IP since unauthenticated)
+    if method == "POST" and path.rstrip("/") == "/agents":
+        return (
+            settings.rate_limit_registration_capacity,
+            settings.rate_limit_registration_refill_per_min,
+            "registration",
+        )
     if method in ("POST", "PATCH", "DELETE"):
         # Job lifecycle endpoints get tighter limits
         if "/jobs" in path:
@@ -65,6 +72,17 @@ def _get_rate_config(method: str, path: str) -> tuple[int, int, str]:
     )
 
 
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP, respecting X-Forwarded-For for reverse proxies."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # First IP in the chain is the original client
+        return forwarded_for.split(",")[0].strip()
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
+
+
 async def check_rate_limit(
     request: Request,
     response: Response,
@@ -72,7 +90,7 @@ async def check_rate_limit(
 ) -> None:
     """Rate limit dependency. Extract agent_id from Authorization header."""
     auth_header = request.headers.get("Authorization", "")
-    agent_id = "anonymous"
+    agent_id: str | None = None
     if auth_header.startswith("AgentSig "):
         try:
             agent_id = auth_header[9:].split(":", 1)[0]
@@ -83,7 +101,11 @@ async def check_rate_limit(
     path = request.url.path
     capacity, refill_rate, category = _get_rate_config(method, path)
 
-    bucket_key = f"ratelimit:{agent_id}:{category}"
+    if agent_id:
+        bucket_key = f"ratelimit:{agent_id}:{category}"
+    else:
+        client_ip = _get_client_ip(request)
+        bucket_key = f"ratelimit:ip:{client_ip}:{category}"
     now = time.time()
 
     result = await redis.eval(

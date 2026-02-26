@@ -69,11 +69,13 @@ async def test_rate_limit_different_buckets(client: AsyncClient) -> None:
 
     disc_cap, disc_refill, disc_cat = _get_rate_config("GET", "/discover")
     read_cap, read_refill, read_cat = _get_rate_config("GET", "/agents/some-id")
-    write_cap, write_refill, write_cat = _get_rate_config("POST", "/agents")
+    reg_cap, reg_refill, reg_cat = _get_rate_config("POST", "/agents")
+    write_cap, write_refill, write_cat = _get_rate_config("POST", "/agents/some-id/deactivate")
     job_cap, job_refill, job_cat = _get_rate_config("POST", "/jobs/123/counter")
 
     assert disc_cat == "discovery"
     assert read_cat == "read"
+    assert reg_cat == "registration"
     assert write_cat == "write"
     assert job_cat == "job_lifecycle"
     assert job_cap <= 20
