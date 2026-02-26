@@ -140,8 +140,39 @@ async def update_agent(
 
 
 async def deactivate_agent(db: AsyncSession, agent_id: uuid.UUID) -> None:
-    """Soft-delete an agent by setting status to deactivated."""
+    """Soft-delete an agent. Cancels/fails active jobs and refunds escrow."""
+    import logging
+    from app.models.job import Job, JobStatus
+    from app.services.escrow import refund_escrow
+
+    logger = logging.getLogger(__name__)
     agent = await get_agent(db, agent_id)
+
+    # Find all active jobs involving this agent
+    cancelable = {JobStatus.PROPOSED, JobStatus.NEGOTIATING, JobStatus.AGREED}
+    refundable = {JobStatus.FUNDED, JobStatus.IN_PROGRESS, JobStatus.DELIVERED}
+
+    result = await db.execute(
+        select(Job).where(
+            ((Job.client_agent_id == agent_id) | (Job.seller_agent_id == agent_id)),
+            Job.status.in_(list(cancelable | refundable)),
+        )
+    )
+    active_jobs = list(result.scalars().all())
+
+    for job in active_jobs:
+        if job.status in cancelable:
+            job.status = JobStatus.CANCELLED
+            logger.info("Cancelled job %s due to agent %s deactivation", job.job_id, agent_id)
+        elif job.status in refundable:
+            job.status = JobStatus.FAILED
+            await db.flush()
+            try:
+                await refund_escrow(db, job.job_id)
+                logger.info("Failed + refunded job %s due to agent %s deactivation", job.job_id, agent_id)
+            except Exception:
+                logger.exception("Failed to refund job %s during agent %s deactivation", job.job_id, agent_id)
+
     agent.status = AgentStatus.DEACTIVATED
     await db.commit()
 
