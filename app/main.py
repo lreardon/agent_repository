@@ -13,25 +13,6 @@ from app.routers import agents, discover, fees, jobs, listings, reviews, wallet
 
 logger = logging.getLogger(__name__)
 
-DEADLINE_CHECK_INTERVAL = 300  # 5 minutes
-
-
-async def _deadline_enforcement_loop() -> None:
-    """Periodically auto-fail overdue jobs and refund escrow."""
-    from app.database import async_session_factory
-    from app.services.job import enforce_deadlines
-
-    while True:
-        await asyncio.sleep(DEADLINE_CHECK_INTERVAL)
-        try:
-            async with async_session_factory() as db:
-                count = await enforce_deadlines(db)
-                if count:
-                    logger.info("Deadline enforcement: auto-failed %d overdue jobs", count)
-        except Exception:
-            logger.exception("Deadline enforcement loop error")
-
-
 async def _recover_wallet_tasks() -> None:
     """Re-spawn confirmation/processing tasks for in-flight deposits and withdrawals."""
     from app.database import async_session_factory
@@ -74,7 +55,8 @@ async def _recover_wallet_tasks() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown."""
     # Start background tasks
-    deadline_task = asyncio.create_task(_deadline_enforcement_loop())
+    from app.services.deadline_queue import run_deadline_consumer
+    deadline_task = asyncio.create_task(run_deadline_consumer())
     await _recover_wallet_tasks()
 
     yield

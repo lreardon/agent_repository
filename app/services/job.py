@@ -261,35 +261,4 @@ async def get_job(db: AsyncSession, job_id: uuid.UUID) -> Job:
     return await _get_job(db, job_id)
 
 
-async def enforce_deadlines(db: AsyncSession) -> int:
-    """Auto-fail jobs past their delivery deadline and refund escrow. Returns count."""
-    from app.services.escrow import refund_escrow
-
-    now = datetime.now(UTC)
-    result = await db.execute(
-        select(Job).where(
-            Job.delivery_deadline.isnot(None),
-            Job.delivery_deadline < now,
-            Job.status.in_([
-                JobStatus.FUNDED,
-                JobStatus.IN_PROGRESS,
-                JobStatus.DELIVERED,
-            ]),
-        )
-    )
-    overdue_jobs = list(result.scalars().all())
-
-    count = 0
-    for job in overdue_jobs:
-        try:
-            job.status = JobStatus.FAILED
-            await db.flush()
-            await refund_escrow(db, job.job_id)
-            await db.commit()
-            logger.info("Auto-failed overdue job %s (deadline was %s)", job.job_id, job.delivery_deadline)
-            count += 1
-        except Exception:
-            await db.rollback()
-            logger.exception("Failed to auto-fail overdue job %s", job.job_id)
-
-    return count
+    # enforce_deadlines removed — replaced by deadline_queue sorted-set consumer

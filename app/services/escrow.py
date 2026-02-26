@@ -1,6 +1,9 @@
 """Escrow business logic — fund, release, refund with row-level locking."""
 
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -106,7 +109,35 @@ async def fund_job(
 
     await db.commit()
     await db.refresh(escrow)
+
+    # Enqueue deadline enforcement if job has a delivery deadline
+    if job.delivery_deadline is not None:
+        try:
+            from app.services.deadline_queue import enqueue_deadline
+            from app.redis import redis_pool
+            import redis.asyncio as aioredis
+
+            redis = aioredis.Redis(connection_pool=redis_pool)
+            await enqueue_deadline(redis, job_id, job.delivery_deadline.timestamp())
+            await redis.aclose()
+        except Exception:
+            logger.warning("Failed to enqueue deadline for job %s", job_id, exc_info=True)
+
     return escrow
+
+
+async def _cancel_deadline_quietly(job_id: uuid.UUID) -> None:
+    """Best-effort cancel of a pending deadline."""
+    try:
+        from app.services.deadline_queue import cancel_deadline
+        from app.redis import redis_pool
+        import redis.asyncio as aioredis
+
+        redis = aioredis.Redis(connection_pool=redis_pool)
+        await cancel_deadline(redis, job_id)
+        await redis.aclose()
+    except Exception:
+        logger.warning("Failed to cancel deadline for job %s", job_id, exc_info=True)
 
 
 async def release_escrow(
@@ -178,6 +209,7 @@ async def release_escrow(
 
     await db.commit()
     await db.refresh(escrow)
+    await _cancel_deadline_quietly(job_id)
     return escrow
 
 
@@ -218,4 +250,5 @@ async def refund_escrow(
 
     await db.commit()
     await db.refresh(escrow)
+    await _cancel_deadline_quietly(job_id)
     return escrow
