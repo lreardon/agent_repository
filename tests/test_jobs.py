@@ -336,6 +336,7 @@ async def _get_funded_job(
     seller_id, seller_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")  # Seller needs balance for storage fee
 
     job = await _propose_job(client, client_id, client_priv, seller_id, "100.00")
     job_id = job["job_id"]
@@ -600,10 +601,13 @@ async def test_full_lifecycle_propose_to_complete(client: AsyncClient) -> None:
     # Result is only visible after completion
     assert resp.json()["result"]["output"] == "all done"
 
-    # Verify seller got paid (minus 2.5% fee): 100 * 0.975 = 97.50
+    # Verify seller got paid:
+    # Started with $10.00, paid $0.01 storage fee on deliver,
+    # received $99.50 from escrow ($100 - $0.50 seller base fee share)
+    # = $10.00 - $0.01 + $99.50 = $109.49
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "97.50"
+    assert resp.json()["balance"] == "109.49"
 
 
 @pytest.mark.asyncio

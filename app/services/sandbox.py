@@ -56,6 +56,7 @@ class SandboxResult:
     stdout: str
     stderr: str
     timed_out: bool
+    elapsed_seconds: float = 0.0
     error: str | None = None
 
     def to_dict(self) -> dict:
@@ -65,6 +66,7 @@ class SandboxResult:
             "stdout": self.stdout[:2000],  # Truncate for API response
             "stderr": self.stderr[:2000],
             "timed_out": self.timed_out,
+            "elapsed_seconds": round(self.elapsed_seconds, 3),
             "error": self.error,
         }
 
@@ -203,6 +205,9 @@ async def run_script_in_sandbox(
         ]
 
         try:
+            import time as _time
+            _t0 = _time.monotonic()
+
             process = await asyncio.create_subprocess_exec(
                 *docker_cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -228,14 +233,17 @@ async def run_script_in_sandbox(
                 except asyncio.TimeoutError:
                     process.kill()
 
+                _elapsed = _time.monotonic() - _t0
                 return SandboxResult(
                     passed=False,
                     exit_code=-1,
                     stdout="",
                     stderr="Execution timed out",
                     timed_out=True,
+                    elapsed_seconds=_elapsed,
                 )
 
+            _elapsed = _time.monotonic() - _t0
             stdout = stdout_bytes[:MAX_OUTPUT_CAPTURE_BYTES].decode("utf-8", errors="replace")
             stderr = stderr_bytes[:MAX_OUTPUT_CAPTURE_BYTES].decode("utf-8", errors="replace")
             exit_code = process.returncode or 0
@@ -246,6 +254,7 @@ async def run_script_in_sandbox(
                 stdout=stdout,
                 stderr=stderr,
                 timed_out=False,
+                elapsed_seconds=_elapsed,
             )
 
         except FileNotFoundError:

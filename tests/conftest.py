@@ -4,6 +4,7 @@ import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import pytest
 import pytest_asyncio
 import redis.asyncio as aioredis
 import sqlalchemy
@@ -15,6 +16,19 @@ from app.database import Base, get_db
 from app.main import app
 from app.redis import get_redis
 from app.utils.crypto import generate_keypair
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings() -> None:
+    """Snapshot settings before each test and restore after to prevent mutation bleed.
+
+    Uses object.__setattr__ to mutate the *same* Settings instance in-place,
+    since app modules hold direct references via `from app.config import settings`.
+    """
+    original = settings.model_dump()
+    yield  # type: ignore[misc]
+    for key, value in original.items():
+        object.__setattr__(settings, key, value)
 
 
 @pytest_asyncio.fixture
@@ -61,6 +75,10 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis] = override_get_redis
+
+    # Flush rate limit keys to prevent cross-test contamination
+    async for key in redis_client.scan_iter("ratelimit:*"):
+        await redis_client.delete(key)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

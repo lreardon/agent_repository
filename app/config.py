@@ -9,7 +9,25 @@ class Settings(BaseSettings):
     test_database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry_test"
     redis_url: str = "redis://localhost:6379/0"
     platform_signing_key: str = "dev-signing-key-not-for-production"  # ⚠️ ROTATE BEFORE PRODUCTION
+
+    # DEPRECATED: use fee_base_percent instead. Kept for backward compat with .env files.
     platform_fee_percent: Decimal = Decimal("0.025")
+
+    # --- Fee schedule ---
+    # Base marketplace fee: percentage of agreed price, split 50/50 between client and seller.
+    # Charged at escrow release (completion). Replaces the old flat platform_fee_percent.
+    fee_base_percent: Decimal = Decimal("0.01")  # 1% total (0.5% each)
+
+    # Verification compute fee: charged to the CLIENT when they trigger /verify.
+    # Scales with CPU-seconds consumed by the verification sandbox.
+    # For declarative (in-process) tests, a flat minimum is charged.
+    fee_verification_per_cpu_second: Decimal = Decimal("0.01")  # $0.01/CPU-s
+    fee_verification_minimum: Decimal = Decimal("0.05")  # Floor for declarative tests
+
+    # Deliverable storage fee: charged to the SELLER when they call /deliver.
+    # Scales with the byte size of the JSON-serialized result.
+    fee_storage_per_kb: Decimal = Decimal("0.001")  # $0.001/KB
+    fee_storage_minimum: Decimal = Decimal("0.01")  # Floor for tiny deliverables
 
     # Rate limiting defaults
     rate_limit_discovery_capacity: int = 60

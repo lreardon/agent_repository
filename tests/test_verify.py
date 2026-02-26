@@ -64,6 +64,7 @@ async def test_verify_passes_releases_escrow(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     criteria = {
         "version": "1.0",
@@ -76,13 +77,13 @@ async def test_verify_passes_releases_escrow(client: AsyncClient) -> None:
 
     job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv, criteria=criteria)
 
-    # Deliver
+    # Deliver (seller pays storage fee)
     result = {"records": [{"name": "Alice"}, {"name": "Bob"}, {"name": "Charlie"}]}
     body = {"result": result}
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", body)
     await client.post(f"/jobs/{job_id}/deliver", json={"result": result}, headers=headers)
 
-    # Verify
+    # Verify (client pays verification fee)
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/verify", b"")
     resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
     assert resp.status_code == 200
@@ -91,11 +92,14 @@ async def test_verify_passes_releases_escrow(client: AsyncClient) -> None:
     assert body["verification"]["passed"] is True
     assert len(body["verification"]["results"]) == 2
     assert all(r["passed"] for r in body["verification"]["results"])
+    # Verify fee breakdown is returned
+    assert "fee_charged" in body
+    assert body["fee_charged"]["fee_type"] == "verification"
 
-    # Seller got paid (minus 2.5% fee)
+    # Seller: $10 - $0.01 storage + $99.50 escrow payout = $109.49
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "97.50"
+    assert resp.json()["balance"] == "109.49"
 
 
 @pytest.mark.asyncio
@@ -104,6 +108,7 @@ async def test_verify_fails_refunds_escrow(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     criteria = {
         "version": "1.0",
@@ -129,10 +134,11 @@ async def test_verify_fails_refunds_escrow(client: AsyncClient) -> None:
     assert body["job"]["status"] == "failed"
     assert body["verification"]["passed"] is False
 
-    # Client refunded
+    # Client refunded — escrow returned, but verification fee is charged even on failure
+    # $500 - $100 (funded) + $100 (refund) - $0.05 (verify fee) = $499.95
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "500.00"
+    assert resp.json()["balance"] == "499.95"
 
 
 @pytest.mark.asyncio
@@ -141,6 +147,7 @@ async def test_verify_no_criteria_auto_completes(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -164,6 +171,7 @@ async def test_verify_majority_threshold(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     criteria = {
         "version": "1.0",
@@ -198,6 +206,7 @@ async def test_verify_rejects_non_client(client: AsyncClient) -> None:
     outsider_id, outsider_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "200.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -230,6 +239,7 @@ async def test_complete_rejects_non_client(client: AsyncClient) -> None:
     outsider_id, outsider_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "200.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
 

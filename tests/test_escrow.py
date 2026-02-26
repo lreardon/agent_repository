@@ -121,6 +121,7 @@ async def test_fund_release_flow(client: AsyncClient) -> None:
     seller_id, seller_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
     job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "100.00")
 
     # Fund
@@ -148,15 +149,17 @@ async def test_fund_release_flow(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json()["status"] == "completed"
 
-    # Seller should have balance = 100 - 2.5% fee = 97.50
+    # Seller: started $10.00, paid $0.01 storage fee, received $99.50 (escrow - 0.5% base fee)
+    # = $10.00 - $0.01 + $99.50 = $109.49
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "97.50"
+    assert resp.json()["balance"] == "109.49"
 
-    # Client balance should still be 400.00
+    # Client: started $500, funded $100 escrow (=$400), paid $0.50 base fee at completion
+    # = $400.00 - $0.50 = $399.50
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "400.00"
+    assert resp.json()["balance"] == "399.50"
 
 
 @pytest.mark.asyncio
@@ -166,6 +169,7 @@ async def test_fund_refund_flow(client: AsyncClient) -> None:
     seller_id, seller_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
     job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "100.00")
 
     # Fund
@@ -191,7 +195,7 @@ async def test_fund_refund_flow(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json()["status"] == "failed"
 
-    # Client should be refunded — balance back to 500
+    # Client should be refunded — balance back to 500 (no base fee on failure)
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
     assert resp.json()["balance"] == "500.00"
@@ -218,11 +222,12 @@ async def test_seller_cannot_fund(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_release_escrow_platform_fee(client: AsyncClient) -> None:
-    """E1/E2: Release escrow verifies 2.5% fee and seller payout."""
+    """E1/E2: Release escrow verifies base fee split and seller payout."""
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "1000.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
     job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "200.00")
 
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
@@ -238,10 +243,11 @@ async def test_release_escrow_platform_fee(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
     await client.post(f"/jobs/{job_id}/complete", headers=headers)
 
-    # Seller should get 200 - 2.5% = 195.00
+    # Seller: started $10.00, paid $0.01 storage, received $199.00 ($200 - $1.00 seller base fee)
+    # = $10.00 - $0.01 + $199.00 = $208.99
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "195.00"
+    assert resp.json()["balance"] == "208.99"
 
 
 @pytest.mark.asyncio
@@ -251,6 +257,7 @@ async def test_refund_restores_full_balance(client: AsyncClient) -> None:
     seller_id, seller_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "300.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
     job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "150.00")
 
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
@@ -275,6 +282,7 @@ async def test_complete_rejects_non_client(client: AsyncClient) -> None:
     seller_id, seller_priv = await _create_agent(client)
 
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
     job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "100.00")
 
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")

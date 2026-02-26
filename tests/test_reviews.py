@@ -74,6 +74,7 @@ async def test_submit_review(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -93,6 +94,7 @@ async def test_both_parties_can_review(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -117,6 +119,7 @@ async def test_duplicate_review_rejected(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -139,6 +142,7 @@ async def test_third_party_cannot_review(client: AsyncClient) -> None:
     seller_id, seller_priv = await _create_agent(client)
     intruder_id, intruder_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -155,6 +159,7 @@ async def test_reputation_updates(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "1000.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     # Complete two jobs, review seller with 4 and 5
     for rating in (4, 5):
@@ -177,6 +182,7 @@ async def test_get_agent_reviews(client: AsyncClient) -> None:
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
     await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
 
     job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv)
 
@@ -211,3 +217,156 @@ async def test_cannot_review_incomplete_job(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", body)
     resp = await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
     assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Additional review tests (R1-R9)
+# ---------------------------------------------------------------------------
+
+
+async def _setup_and_complete_job(client: AsyncClient) -> tuple[str, str, str, str, str]:
+    """Helper: create agents, deposit, complete job. Returns (client_id, client_priv, seller_id, seller_priv, job_id)."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+    job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv)
+    return client_id, client_priv, seller_id, seller_priv, job_id
+
+
+@pytest.mark.asyncio
+async def test_review_with_tags_and_comment(client: AsyncClient) -> None:
+    """R7: Review with tags and comment."""
+    client_id, client_priv, seller_id, seller_priv, job_id = await _setup_and_complete_job(client)
+
+    review = {"rating": 4, "tags": ["fast", "reliable"], "comment": "Great work!"}
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    resp = await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["tags"] == ["fast", "reliable"]
+    assert body["comment"] == "Great work!"
+    assert body["role"] == "client_reviewing_seller"
+
+
+@pytest.mark.asyncio
+async def test_review_rating_boundaries(client: AsyncClient) -> None:
+    """R8/R9: Rating 1 and 5 accepted, 0 and 6 rejected."""
+    client_id, client_priv, seller_id, seller_priv, job_id = await _setup_and_complete_job(client)
+
+    # Rating 1 — valid
+    review = {"rating": 1}
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    resp = await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+    assert resp.status_code == 201
+
+    # Need a new completed job for invalid rating tests
+    client_id2, client_priv2, _, _, job_id2 = await _setup_and_complete_job(client)
+
+    # Rating 0 — invalid
+    review = {"rating": 0}
+    headers = make_auth_headers(client_id2, client_priv2, "POST", f"/jobs/{job_id2}/reviews", review)
+    resp = await client.post(f"/jobs/{job_id2}/reviews", json=review, headers=headers)
+    assert resp.status_code == 422
+
+    # Rating 6 — invalid
+    review = {"rating": 6}
+    headers = make_auth_headers(client_id2, client_priv2, "POST", f"/jobs/{job_id2}/reviews", review)
+    resp = await client.post(f"/jobs/{job_id2}/reviews", json=review, headers=headers)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_for_job(client: AsyncClient) -> None:
+    """R6: GET /jobs/{id}/reviews returns all reviews for a job."""
+    client_id, client_priv, seller_id, seller_priv, job_id = await _setup_and_complete_job(client)
+
+    # Both parties review
+    review = {"rating": 5}
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+
+    review = {"rating": 4}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+
+    resp = await client.get(f"/jobs/{job_id}/reviews")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_review_failed_job_allowed(client: AsyncClient) -> None:
+    """R1: Can review a failed job."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+
+    # Propose → accept → fund → start → fail
+    data = {"seller_agent_id": seller_id, "max_budget": "100.00"}
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    job_id = resp.json()["job_id"]
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    await client.post(f"/jobs/{job_id}/fail", headers=headers)
+
+    # Review the failed job
+    review = {"rating": 2, "comment": "Did not deliver"}
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    resp = await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_get_agent_reviews_pagination(client: AsyncClient) -> None:
+    """R5: GET /agents/{id}/reviews with pagination."""
+    client_id, client_priv, seller_id, seller_priv, job_id = await _setup_and_complete_job(client)
+
+    review = {"rating": 5}
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+
+    resp = await client.get(f"/agents/{seller_id}/reviews?limit=1&offset=0")
+    assert resp.status_code == 200
+    assert len(resp.json()) <= 1
+
+
+def test_recency_weight_recent() -> None:
+    """R3: Reviews from last 30 days get 2x weight."""
+    from app.services.review import _recency_weight
+    from datetime import UTC, datetime, timedelta
+
+    recent = datetime.now(UTC) - timedelta(days=5)
+    assert _recency_weight(recent) == 2.0
+
+    mid = datetime.now(UTC) - timedelta(days=60)
+    assert _recency_weight(mid) == 1.5
+
+    old = datetime.now(UTC) - timedelta(days=120)
+    assert _recency_weight(old) == 1.0
+
+
+def test_recency_weight_boundary_30_days() -> None:
+    """R3: Exactly 30 days → 2x, 31 days → 1.5x."""
+    from app.services.review import _recency_weight
+    from datetime import UTC, datetime, timedelta
+
+    at_30 = datetime.now(UTC) - timedelta(days=30)
+    assert _recency_weight(at_30) == 2.0
+
+    at_31 = datetime.now(UTC) - timedelta(days=31)
+    assert _recency_weight(at_31) == 1.5
+
+    at_90 = datetime.now(UTC) - timedelta(days=90)
+    assert _recency_weight(at_90) == 1.5
+
+    at_91 = datetime.now(UTC) - timedelta(days=91)
+    assert _recency_weight(at_91) == 1.0

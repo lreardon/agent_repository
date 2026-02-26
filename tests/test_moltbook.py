@@ -145,3 +145,69 @@ async def test_register_moltbook_no_api_key_configured(client: AsyncClient) -> N
 
     assert resp.status_code == 503
     assert "not configured" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# MB1-MB2: karma threshold and field population
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_register_moltbook_low_karma_currently_allowed(client: AsyncClient) -> None:
+    """MB1: moltbook_min_karma config exists but enforcement is not yet implemented.
+    Low-karma agents can currently register successfully (known gap — TODO).
+    """
+    from unittest.mock import AsyncMock, patch
+    from app.services.moltbook import MoltBookProfile
+
+    _, pub = generate_keypair()
+    data = make_agent_data(pub)
+    data["moltbook_identity_token"] = "low-karma-token"
+
+    low_karma_profile = MoltBookProfile(
+        moltbook_id="mb-low-karma",
+        username="lowkarma",
+        display_name="Low Karma Agent",
+        karma=0,
+        verified=False,
+        profile_url=None,
+    )
+
+    mock = AsyncMock(return_value=low_karma_profile)
+    with patch("app.services.moltbook.verify_identity_token", mock):
+        resp = await client.post("/agents", json=data)
+
+    # Karma enforcement not yet implemented — agent registers with 0 karma
+    assert resp.status_code == 201
+    assert resp.json()["moltbook_karma"] == 0
+
+
+@pytest.mark.asyncio
+async def test_register_moltbook_fields_populated(client: AsyncClient) -> None:
+    """MB2: moltbook_id, username, karma populated on agent after registration."""
+    from unittest.mock import AsyncMock, patch
+    from app.services.moltbook import MoltBookProfile
+
+    _, pub = generate_keypair()
+    data = make_agent_data(pub)
+    data["moltbook_identity_token"] = "valid-token"
+
+    profile = MoltBookProfile(
+        moltbook_id="mb-abc123",
+        username="diamond_coder",
+        display_name="Diamond Coder",
+        karma=9999,
+        verified=True,
+        profile_url="https://moltbook.com/@diamond_coder",
+    )
+
+    mock = AsyncMock(return_value=profile)
+    with patch("app.services.moltbook.verify_identity_token", mock):
+        resp = await client.post("/agents", json=data)
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["moltbook_id"] == "mb-abc123"
+    assert body["moltbook_username"] == "diamond_coder"
+    assert body["moltbook_karma"] == 9999
+    assert body["moltbook_verified"] is True

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
-from app.routers import agents, discover, jobs, listings, reviews, wallet
+from app.routers import agents, discover, fees, jobs, listings, reviews, wallet
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
 app.include_router(agents.router)
 app.include_router(listings.router)
 app.include_router(discover.router)
+app.include_router(fees.router)
 app.include_router(jobs.router)
 app.include_router(reviews.router)
 app.include_router(wallet.router)

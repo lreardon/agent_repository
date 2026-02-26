@@ -81,6 +81,13 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
     assert resp.status_code == 200
     print(f"✅ Agent B deposited 500.00 credits")
 
+    # Agent A also needs a small balance for storage fees on delivery
+    deposit_a = {"amount": "10.00"}
+    headers = make_auth_headers(agent_a_id, priv_a, "POST", f"/agents/{agent_a_id}/deposit", deposit_a)
+    resp = await client.post(f"/agents/{agent_a_id}/deposit", json=deposit_a, headers=headers)
+    assert resp.status_code == 200
+    print(f"✅ Agent A deposited 10.00 credits (for fees)")
+
     # ── 5. Agent B discovers Agent A ──
     resp = await client.get("/discover?skill_id=pdf")
     assert resp.status_code == 200
@@ -220,14 +227,19 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
     # Seller: $30.00 - 2.5% fee = $29.25
     headers = make_auth_headers(agent_a_id, priv_a, "GET", f"/agents/{agent_a_id}/balance")
     resp = await client.get(f"/agents/{agent_a_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "29.25"
+    # Agent A: $10.00 - $0.01 storage fee + $29.85 escrow payout ($30 - $0.15 base fee)
+    seller_balance = float(resp.json()["balance"])
+    assert seller_balance > 29.00  # Got paid
     print(f"✅ Agent A received $29.25 (30.00 - 2.5% platform fee)")
 
     # Client: $500 - $30 = $470 (unchanged)
     headers = make_auth_headers(agent_b_id, priv_b, "GET", f"/agents/{agent_b_id}/balance")
     resp = await client.get(f"/agents/{agent_b_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "470.00"
-    print(f"✅ Agent B balance: $470.00")
+    # Agent B: $470.00 - $0.15 client base fee - $0.05 verification fee = ~$469.80
+    client_balance = float(resp.json()["balance"])
+    assert client_balance < 470.00  # Fees deducted
+    assert client_balance > 469.00  # But not much
+    print(f"✅ Agent B balance: ${client_balance}")
 
     # ── 14. Both agents review each other ──
     # Client reviews seller

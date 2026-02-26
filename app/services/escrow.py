@@ -125,9 +125,22 @@ async def release_escrow(
     if escrow.status != EscrowStatus.FUNDED:
         raise HTTPException(status_code=409, detail=f"Escrow must be funded, currently {escrow.status.value}")
 
-    # Calculate platform fee
-    fee = (escrow.amount * settings.platform_fee_percent).quantize(Decimal("0.01"))
-    seller_payout = escrow.amount - fee
+    # Calculate base marketplace fee (split between client and seller)
+    from app.services.fees import calculate_base_fee, charge_fee
+    client_base_fee, seller_base_fee = calculate_base_fee(escrow.amount)
+    total_fee = client_base_fee.amount + seller_base_fee.amount
+    seller_payout = escrow.amount - seller_base_fee.amount
+
+    # Charge client's share of the base fee from their balance
+    # (separate from the escrow — client pays agreed_price + their fee share)
+    result = await db.execute(
+        select(Agent).where(Agent.agent_id == escrow.client_agent_id).with_for_update()
+    )
+    client = result.scalar_one_or_none()
+    if client is not None and client.balance >= client_base_fee.amount:
+        client.balance -= client_base_fee.amount
+    # If client can't cover their base fee share, it's absorbed by the platform
+    # (the job still completes — we don't block completion over a small fee)
 
     # Lock seller's balance row
     result = await db.execute(
@@ -137,7 +150,7 @@ async def release_escrow(
     if seller is None:
         raise HTTPException(status_code=404, detail="Seller agent not found")
 
-    # Credit seller
+    # Credit seller (minus their base fee share)
     seller.balance = seller.balance + seller_payout
 
     # Update escrow
@@ -155,7 +168,12 @@ async def release_escrow(
     # Audit
     await _log_audit(
         db, escrow.escrow_id, EscrowAction.RELEASED, seller_payout, None,
-        {"fee": str(fee), "fee_percent": str(settings.platform_fee_percent)},
+        {
+            "total_fee": str(total_fee),
+            "client_base_fee": str(client_base_fee.amount),
+            "seller_base_fee": str(seller_base_fee.amount),
+            "fee_base_percent": str(settings.fee_base_percent),
+        },
     )
 
     await db.commit()

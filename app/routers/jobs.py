@@ -104,26 +104,42 @@ async def start_job(
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/deliver", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
+@router.post("/{job_id}/deliver", dependencies=[Depends(check_rate_limit)])
 async def deliver_job(
     job_id: uuid.UUID,
     data: DeliverPayload,
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
-) -> JobResponse:
-    """Seller submits deliverable."""
+) -> dict:
+    """Seller submits deliverable. Storage fee is charged to the seller."""
+    from app.services.fees import calculate_storage_fee, charge_fee
+
+    # Calculate and charge storage fee before accepting delivery
+    storage_fee = calculate_storage_fee(data.result)
+    await charge_fee(db, auth.agent_id, storage_fee)
+
     job = await job_service.deliver_job(db, job_id, auth.agent_id, data.result)
-    return JobResponse.model_validate(job)
+    return {
+        **JobResponse.model_validate(job).model_dump(mode="json"),
+        "fee_charged": storage_fee.to_dict(),
+    }
 
 
-@router.post("/{job_id}/verify", response_model=VerifyResponse, dependencies=[Depends(check_rate_limit)])
+@router.post("/{job_id}/verify", dependencies=[Depends(check_rate_limit)])
 async def verify_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
-) -> VerifyResponse:
-    """Run acceptance tests on delivered job. Auto-completes or fails."""
+) -> dict:
+    """Run acceptance tests on delivered job. Auto-completes or fails.
+
+    Verification fee is charged to the client — even if verification fails.
+    This disincentivizes resource-exhaustion attacks and rigged scripts.
+    """
+    import time as _time
     from fastapi import HTTPException as HTTPExc
+    from app.services.fees import calculate_verification_fee, charge_fee
+
     job = await job_service.get_job(db, job_id)
 
     if auth.agent_id != job.client_agent_id:
@@ -136,21 +152,32 @@ async def verify_job(
     criteria = job.acceptance_criteria or {}
     output = job.result
 
-    # Determine verification mode
+    # Determine verification mode and track elapsed time
+    cpu_seconds = 0.0
     if criteria.get("script"):
         # Script-based: run in Docker sandbox
         suite_result = await run_script_test(criteria, output)
+        # Use actual elapsed time from sandbox
+        if suite_result.sandbox_result:
+            cpu_seconds = suite_result.sandbox_result.elapsed_seconds
     elif criteria.get("tests"):
-        # Declarative tests: run in-process
+        # Declarative tests: run in-process (minimal CPU, charge minimum)
+        t0 = _time.monotonic()
         suite_result = run_test_suite(criteria, output)
+        cpu_seconds = _time.monotonic() - t0
     else:
-        # No criteria defined — auto-complete
+        # No criteria defined — charge minimum fee, auto-complete
+        verify_fee = calculate_verification_fee(0.0)
+        await charge_fee(db, auth.agent_id, verify_fee)
         escrow = await escrow_service.release_escrow(db, job_id)
         job = await job_service.get_job(db, job_id)
-        return VerifyResponse(
-            job=JobResponse.model_validate(job),
-            verification=None,
-        )
+        resp = VerifyResponse(job=JobResponse.model_validate(job), verification=None)
+        return {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
+
+    # Charge verification fee AFTER running (based on actual resource usage)
+    # but BEFORE releasing escrow (so fee is paid regardless of outcome)
+    verify_fee = calculate_verification_fee(cpu_seconds)
+    await charge_fee(db, auth.agent_id, verify_fee)
 
     verification = suite_result.to_dict()
 
@@ -160,10 +187,11 @@ async def verify_job(
     else:
         job = await job_service.fail_job(db, job_id, auth.agent_id)
 
-    return VerifyResponse(
+    resp = VerifyResponse(
         job=JobResponse.model_validate(job),
         verification=verification,
     )
+    return {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
 
 
 @router.post("/{job_id}/fail", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])

@@ -213,3 +213,44 @@ async def test_signature_wrong_path(client: AsyncClient) -> None:
     )
     assert resp.status_code == 403
     assert "Invalid signature" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Additional auth edge cases (AU1, AU3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_auth_without_nonce_succeeds(client: AsyncClient) -> None:
+    """AU1: Missing X-Nonce header — request still succeeds (nonce is optional)."""
+    agent_id, priv = await _create_agent(client)
+
+    timestamp = datetime.now(UTC).isoformat()
+    signature = sign_request(priv, timestamp, "GET", f"/agents/{agent_id}/balance", b"")
+
+    resp = await client.get(
+        f"/agents/{agent_id}/balance",
+        headers={
+            "Authorization": f"AgentSig {agent_id}:{signature}",
+            "X-Timestamp": timestamp,
+            # No X-Nonce header
+        },
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_auth_with_deactivated_agent_rejected(client: AsyncClient) -> None:
+    """AU3: Auth with deactivated agent returns 403 'not active'."""
+    agent_id, priv = await _create_agent(client)
+
+    # Deactivate
+    headers = make_auth_headers(agent_id, priv, "DELETE", f"/agents/{agent_id}")
+    resp = await client.delete(f"/agents/{agent_id}", headers=headers)
+    assert resp.status_code == 204
+
+    # Try authenticated request
+    headers = make_auth_headers(agent_id, priv, "GET", f"/agents/{agent_id}/balance")
+    resp = await client.get(f"/agents/{agent_id}/balance", headers=headers)
+    assert resp.status_code == 403
+    assert "not active" in resp.json()["detail"]

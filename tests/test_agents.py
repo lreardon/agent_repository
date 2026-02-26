@@ -174,3 +174,155 @@ async def test_register_private_ip_url(client: AsyncClient) -> None:
 
     resp = await client.post("/agents", json=data)
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Agent Card endpoint
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_no_card(client: AsyncClient) -> None:
+    """A2: GET /agents/{id}/agent-card returns 404 when agent has no card."""
+    _, pub = generate_keypair()
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    agent_id = resp.json()["agent_id"]
+
+    resp = await client.get(f"/agents/{agent_id}/agent-card")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Reputation endpoint
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_reputation_new_agent(client: AsyncClient) -> None:
+    """A3/A4: GET /agents/{id}/reputation returns 'New' for agent with no reviews."""
+    _, pub = generate_keypair()
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    agent_id = resp.json()["agent_id"]
+
+    resp = await client.get(f"/agents/{agent_id}/reputation")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reputation_seller_display"] == "New"
+    assert body["reputation_client_display"] == "New"
+    assert body["total_reviews_as_seller"] == 0
+    assert body["total_reviews_as_client"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Validation edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_register_max_capabilities_boundary(client: AsyncClient) -> None:
+    """A7: 20 capabilities OK, 21 rejected."""
+    _, pub = generate_keypair()
+    data = make_agent_data(pub)
+    data["capabilities"] = [f"cap-{i}" for i in range(20)]
+    resp = await client.post("/agents", json=data)
+    assert resp.status_code == 201
+
+    _, pub2 = generate_keypair()
+    data2 = make_agent_data(pub2)
+    data2["capabilities"] = [f"cap-{i}" for i in range(21)]
+    resp2 = await client.post("/agents", json=data2)
+    assert resp2.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_invalid_capability_format(client: AsyncClient) -> None:
+    """A8: Capabilities with special chars rejected."""
+    _, pub = generate_keypair()
+    data = make_agent_data(pub)
+    data["capabilities"] = ["valid-cap", "invalid cap!"]
+    resp = await client.post("/agents", json=data)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_partial_update_display_name_only(client: AsyncClient) -> None:
+    """A10: PATCH with only display_name, no other fields."""
+    priv, pub = generate_keypair()
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    agent_id = resp.json()["agent_id"]
+    original_url = resp.json()["endpoint_url"]
+
+    update = {"display_name": "New Name Only"}
+    headers = make_auth_headers(agent_id, priv, "PATCH", f"/agents/{agent_id}", update)
+    resp = await client.patch(f"/agents/{agent_id}", json=update, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "New Name Only"
+    assert resp.json()["endpoint_url"] == original_url
+
+
+@pytest.mark.asyncio
+async def test_deactivated_agent_still_visible(client: AsyncClient) -> None:
+    """A13: GET /agents/{id} returns deactivated agent (not 404)."""
+    priv, pub = generate_keypair()
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    agent_id = resp.json()["agent_id"]
+
+    headers = make_auth_headers(agent_id, priv, "DELETE", f"/agents/{agent_id}")
+    await client.delete(f"/agents/{agent_id}", headers=headers)
+
+    resp = await client.get(f"/agents/{agent_id}")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deactivated"
+
+
+@pytest.mark.asyncio
+async def test_register_with_empty_capabilities(client: AsyncClient) -> None:
+    """A6: Empty capabilities list vs null both work."""
+    _, pub1 = generate_keypair()
+    data1 = make_agent_data(pub1)
+    data1["capabilities"] = []
+    resp1 = await client.post("/agents", json=data1)
+    assert resp1.status_code == 201
+
+    _, pub2 = generate_keypair()
+    data2 = make_agent_data(pub2)
+    data2["capabilities"] = None
+    resp2 = await client.post("/agents", json=data2)
+    assert resp2.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_register_max_length_fields(client: AsyncClient) -> None:
+    """A5: Registration with max-length name (128) and description (4096)."""
+    _, pub = generate_keypair()
+    data = make_agent_data(pub)
+    data["display_name"] = "A" * 128
+    data["description"] = "B" * 4096
+    resp = await client.post("/agents", json=data)
+    assert resp.status_code == 201
+    assert resp.json()["display_name"] == "A" * 128
+
+
+@pytest.mark.asyncio
+async def test_register_name_too_long(client: AsyncClient) -> None:
+    """display_name > 128 chars rejected."""
+    _, pub = generate_keypair()
+    data = make_agent_data(pub)
+    data["display_name"] = "A" * 129
+    resp = await client.post("/agents", json=data)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_deactivate_then_reregister_same_key(client: AsyncClient) -> None:
+    """A12: Deactivated agent's public key is still unique — re-registration fails."""
+    priv, pub = generate_keypair()
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    agent_id = resp.json()["agent_id"]
+
+    headers = make_auth_headers(agent_id, priv, "DELETE", f"/agents/{agent_id}")
+    await client.delete(f"/agents/{agent_id}", headers=headers)
+
+    # Try re-registering with same key
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    assert resp.status_code == 409
