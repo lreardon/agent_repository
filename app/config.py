@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     env: str = "development"
+    dev_deposit_enabled: bool = False
     database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry"
     test_database_url: str = "postgresql+asyncpg://api_user:localdev@localhost:5432/agent_registry_test"
     redis_url: str = "redis://localhost:6379/0"

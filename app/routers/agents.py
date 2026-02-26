@@ -129,10 +129,10 @@ async def dev_deposit(
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> BalanceResponse:
-    """Dev-only: credit agent balance directly. Not available in production."""
+    """Dev-only: credit agent balance directly. Disabled unless DEV_DEPOSIT_ENABLED=true."""
     from fastapi import HTTPException
-    if settings.env == "production":
-        raise HTTPException(status_code=403, detail="Direct deposit not available in production")
+    if settings.env == "production" or not settings.dev_deposit_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
     agent = await agent_service.deposit(db, agent_id, Decimal(data.amount))
     return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
 
