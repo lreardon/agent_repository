@@ -1,5 +1,7 @@
 """FastAPI application entry point."""
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
@@ -9,11 +11,80 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from app.routers import agents, discover, fees, jobs, listings, reviews, wallet
 
+logger = logging.getLogger(__name__)
+
+DEADLINE_CHECK_INTERVAL = 300  # 5 minutes
+
+
+async def _deadline_enforcement_loop() -> None:
+    """Periodically auto-fail overdue jobs and refund escrow."""
+    from app.database import async_session_factory
+    from app.services.job import enforce_deadlines
+
+    while True:
+        await asyncio.sleep(DEADLINE_CHECK_INTERVAL)
+        try:
+            async with async_session_factory() as db:
+                count = await enforce_deadlines(db)
+                if count:
+                    logger.info("Deadline enforcement: auto-failed %d overdue jobs", count)
+        except Exception:
+            logger.exception("Deadline enforcement loop error")
+
+
+async def _recover_wallet_tasks() -> None:
+    """Re-spawn confirmation/processing tasks for in-flight deposits and withdrawals."""
+    from app.database import async_session_factory
+    from app.models.wallet import WalletDeposit, WalletWithdrawal
+    from app.services.wallet import _watch_deposit_confirmations, _process_withdrawal
+    from sqlalchemy import select
+
+    try:
+        async with async_session_factory() as db:
+            # Recover confirming deposits
+            result = await db.execute(
+                select(WalletDeposit).where(WalletDeposit.status == "confirming")
+            )
+            deposits = list(result.scalars().all())
+            for dep in deposits:
+                logger.info("Recovering confirming deposit %s (tx: %s)", dep.deposit_id, dep.tx_hash)
+                asyncio.create_task(_watch_deposit_confirmations(dep.deposit_id, dep.tx_hash))
+
+            # Recover pending/processing withdrawals
+            result = await db.execute(
+                select(WalletWithdrawal).where(
+                    WalletWithdrawal.status.in_(["pending", "processing"])
+                )
+            )
+            withdrawals = list(result.scalars().all())
+            for wd in withdrawals:
+                logger.info("Recovering pending withdrawal %s", wd.withdrawal_id)
+                asyncio.create_task(_process_withdrawal(wd.withdrawal_id))
+
+            if deposits or withdrawals:
+                logger.info(
+                    "Wallet recovery: %d deposits, %d withdrawals re-spawned",
+                    len(deposits), len(withdrawals),
+                )
+    except Exception:
+        logger.exception("Wallet task recovery failed")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown."""
+    # Start background tasks
+    deadline_task = asyncio.create_task(_deadline_enforcement_loop())
+    await _recover_wallet_tasks()
+
     yield
+
+    # Cleanup
+    deadline_task.cancel()
+    try:
+        await deadline_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
