@@ -53,6 +53,7 @@ class AgentCreate(BaseModel):
     endpoint_url: str = Field(..., max_length=2048)
     capabilities: list[str] | None = Field(None, max_length=20)
     moltbook_identity_token: str | None = Field(None, max_length=4096, description="MoltBook identity token for verification")
+    registration_token: str | None = Field(None, max_length=128, description="One-time token from email verification")
 
     @field_validator("endpoint_url")
     @classmethod

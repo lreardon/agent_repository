@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
-from app.routers import agents, discover, fees, jobs, listings, reviews, wallet
+from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +144,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
 
 # Routers
+app.include_router(auth.router)
 app.include_router(agents.router)
 app.include_router(listings.router)
 app.include_router(discover.router)

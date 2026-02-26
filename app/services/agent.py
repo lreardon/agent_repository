@@ -31,6 +31,17 @@ async def register_agent(
     If the card fetch fails and the agent provides capabilities, we allow
     registration with those capabilities (graceful degradation for v1).
     """
+    # Email verification gate
+    account = None
+    if settings.email_verification_required:
+        if not data.registration_token:
+            raise HTTPException(
+                status_code=422,
+                detail="Registration token required. Sign up at POST /auth/signup to get one.",
+            )
+        from app.services.account import validate_registration_token
+        account = await validate_registration_token(db, data.registration_token)
+
     # Check for duplicate public key
     result = await db.execute(
         select(Agent).where(Agent.public_key == data.public_key)
@@ -89,6 +100,13 @@ async def register_agent(
         moltbook_verified=moltbook_profile.verified if moltbook_profile else False,
     )
     db.add(agent)
+    await db.flush()
+
+    # Link agent to account if email verification was used
+    if account is not None:
+        from app.services.account import link_agent_to_account
+        await link_agent_to_account(db, account, agent.agent_id)
+
     await db.commit()
     await db.refresh(agent)
 

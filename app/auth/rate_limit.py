@@ -49,6 +49,13 @@ def _get_rate_config(method: str, path: str) -> tuple[int, int, str]:
             settings.rate_limit_discovery_refill_per_min,
             "discovery",
         )
+    # Signup endpoint: 1/minute per IP
+    if method == "POST" and path.rstrip("/") == "/auth/signup":
+        return (
+            settings.rate_limit_signup_capacity,
+            settings.rate_limit_signup_refill_per_min,
+            "signup",
+        )
     # Registration endpoint gets its own tight limit (per-IP since unauthenticated)
     if method == "POST" and path.rstrip("/") == "/agents":
         return (

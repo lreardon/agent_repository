@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     rate_limit_write_refill_per_min: int = 10
     rate_limit_registration_capacity: int = 5
     rate_limit_registration_refill_per_min: int = 2
+    rate_limit_signup_capacity: int = 1
+    rate_limit_signup_refill_per_min: int = 1
 
     # A2A
     require_agent_card: bool = True  # Set False in tests to skip Agent Card fetch
@@ -86,6 +88,21 @@ class Settings(BaseSettings):
     moltbook_api_url: str = "https://moltbook.com/api/v1"
     moltbook_required: bool = False  # If True, registration requires MoltBook identity
     moltbook_min_karma: int = 0  # Minimum karma to skip probation
+
+    # Base URL for verification links
+    base_url: str = "http://localhost:8000"
+
+    # Email
+    email_backend: str = "log"  # "log" for dev (prints to console), "smtp" for production
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_address: str = "noreply@agent-registry.example.com"
+    smtp_use_tls: bool = True
+
+    # Email verification
+    email_verification_required: bool = False  # Set True in production to gate registration
 
     # CORS
     cors_allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
