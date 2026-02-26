@@ -1,7 +1,7 @@
 # No job timeout / deadline enforcement
 
 **Severity:** 🟠 High
-**Status:** 🟡 Open
+**Status:** ✅ Closed
 **Source:** CONCERNS.md #16, CONCERNS2.md #16, CONCERNS3.md #6, CONCERNS3-claude.md #16
 
 ## Description
@@ -17,7 +17,13 @@
 
 ## Mitigation Status
 
-**None.** Deadline exists in model but no enforcement mechanism.
+**✅ Fully implemented.** Three-layer enforcement:
+
+1. **Redis sorted-set deadline queue** (`app/services/deadline_queue.py`): When a job is funded with a `delivery_deadline`, it's added to a Redis sorted set. A background consumer (`run_deadline_consumer`) blocks until the next deadline fires, then auto-fails the job and refunds escrow.
+2. **Startup recovery** (`_recover_deadlines()` in `app/main.py`): On startup, all active jobs (FUNDED/IN_PROGRESS/DELIVERED) with deadlines are re-enqueued via idempotent ZADD — survives Redis data loss and server restarts.
+3. **Cancellation on completion**: When a job completes or is refunded, its deadline is removed from the queue (`cancel_deadline` called in `app/services/escrow.py`).
+
+Test coverage in `tests/test_deadline_queue.py` (9 tests).
 
 ## Fix Options
 

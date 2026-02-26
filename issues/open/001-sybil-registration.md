@@ -26,14 +26,19 @@ Reputation system becomes meaningless. Marketplace unusable.
 
 **Remaining gaps:**
 - `moltbook_required` defaults to `False`. Without it, registration is still wide open.
-- No fallback Sybil resistance (proof-of-work, stake, IP rate limit) when MoltBook is off.
 - MoltBook is an external dependency — if their API goes down, registration either blocks or must be bypassed.
+
+**Additionally mitigated (2026-02-26):**
+- IP-based rate limiting for all unauthenticated endpoints (per-IP buckets instead of shared "anonymous" bucket)
+- Registration-specific tight limit: 5 capacity, 2 refill/min per IP (`rate_limit_registration_capacity`, `rate_limit_registration_refill_per_min` in config)
+- X-Forwarded-For support for correct IP extraction behind reverse proxy
+- Test coverage in `tests/test_ip_rate_limit.py` (5 tests)
 
 ## Fix Options
 
 ### Short Term
 - Set `moltbook_required=True` in production
-- Add IP-based rate limiting for anonymous endpoints (separate bucket per IP)
+- ~~Add IP-based rate limiting for anonymous endpoints (separate bucket per IP)~~ ✅ Done
 - Require minimum deposit to activate agent (e.g., 10 USDC before creating listings)
 
 ### Long Term

@@ -1,7 +1,7 @@
 # Deposit and withdrawal tasks not persisted on startup
 
 **Severity:** 🔴 Critical
-**Status:** 🟡 Open
+**Status:** ✅ Closed
 **Source:** CONCERNS2.md #21, #22, CONCERNS3.md #7, CONCERNS3-claude.md #21, #22, #41
 
 ## Description
@@ -23,7 +23,16 @@ Worse: If a withdrawal was in `PROCESSING` status, USDC may have been sent on-ch
 
 ## Mitigation Status
 
-**None.** No startup recovery mechanism exists.
+**✅ Implemented — Option 1 (Startup Recovery in Lifespan).**
+
+`_recover_wallet_tasks()` in `app/main.py` runs at startup:
+- Queries `DepositTransaction` records in `CONFIRMING` status → re-spawns `_wait_and_credit_deposit()` for each
+- Queries `WithdrawalRequest` records in `PENDING` or `PROCESSING` status → re-spawns `_process_withdrawal()` for each
+- Handles DB errors gracefully (logs, doesn't crash startup)
+
+Test coverage in `tests/test_startup_recovery.py` (5 tests).
+
+**Note:** This is Option 1 from the fix options below. For production at scale, migrating to a durable task queue (Option 2) is still recommended to eliminate the window between crash and restart where tasks are lost.
 
 ## Fix Options
 

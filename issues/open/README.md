@@ -8,7 +8,6 @@ Issues that are still open and need attention.
 |---|-------|---------|
 | 001 | [Sybil Registration](001-sybil-registration.md) | Unauthenticated registration enables reputation farming and discovery spam |
 | 007 | [HD Wallet Seed Security](007-hd-wallet-seed-security.md) | BIP-39 mnemonic in plaintext .env is single point of compromise |
-| 008 | [Async Task Persistence](008-async-task-persistence.md) | Deposit/withdrawal tasks lost on server restart |
 
 ## High (🟠)
 
@@ -16,7 +15,6 @@ Issues that are still open and need attention.
 |---|-------|---------|
 | 002 | [Verification Resource Exhaustion](002-verification-resource-exhaustion.md) | Unbounded Docker compute can DoS platform |
 | 003 | [Unbounded Deliverable Size](003-unbounded-deliverable-size.md) | No explicit size limit on deliverable JSON payloads |
-| 006 | [No Deadline Enforcement](006-no-deadline-enforcement.md) | Jobs can sit forever with escrow locked |
 
 ## Medium (🟡)
 
@@ -33,16 +31,16 @@ Issues that are still open and need attention.
 
 ## Total
 
-- **Critical:** 3 issues
-- **High:** 3 issues
+- **Critical:** 2 issues
+- **High:** 2 issues
 - **Medium:** 2 issues
 - **Architecture:** 1 issue
-- **Total:** 9 open issues
+- **Total:** 7 open issues
 
 ## Priority Order
 
-1. **Fix immediately:** #001, #007, #008
-2. **High priority:** #002, #003, #006
+1. **Fix immediately:** #001, #007
+2. **High priority:** #002, #003
 3. **Medium priority:** #004, #005
 4. **Design phase:** #009
 
