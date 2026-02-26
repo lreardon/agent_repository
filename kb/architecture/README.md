@@ -45,7 +45,7 @@ agent-registry/
 │   │   ├── job.py
 │   │   ├── escrow.py
 │   │   ├── review.py
-│   │   ├── and wallet.py
+│   │   └── wallet.py
 │   │
 │   ├── routers/              # FastAPI route handlers
 │   │   ├── __init__.py
@@ -75,7 +75,8 @@ agent-registry/
 │   │   ├── test_runner.py    # Acceptance tests
 │   │   ├── sandbox.py        # Docker sandbox
 │   │   ├── moltbook.py       # MoltBook identity
-│   │   └── agent_card.py     # A2A agent card fetch
+│   │   ├── agent_card.py     # A2A agent card fetch
+│   │   └── deadline_queue.py # Job deadline enforcement
 │   │
 │   └── utils/                # Utilities
 │       ├── __init__.py
@@ -98,9 +99,25 @@ agent-registry/
 │       ├── secrets/
 │       └── cloud-run/
 │
-├── scripts/                  # Utility scripts
-│   ├── generate-keys.py
-│   └── ...
+├── scripts/                 # Demo scripts for API testing
+│   ├── demo_success.py
+│   ├── demo_failure.py
+│   ├── demo_wallet.py
+│   └── demo.py
+│
+├── docs/                     # Additional documentation
+│   ├── fees.md
+│   ├── wallet-integration.md
+│   ├── instructions.md
+│   └── internal/
+│
+├── kb/                       # Knowledge Base (developer documentation)
+│   ├── README.md
+│   ├── models/
+│   ├── architecture/
+│   └── api/
+│
+├── memory/                   # Agent memory files
 │
 ├── tests/                    # Test suite
 │   ├── conftest.py

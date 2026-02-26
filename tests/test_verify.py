@@ -134,11 +134,11 @@ async def test_verify_fails_refunds_escrow(client: AsyncClient) -> None:
     assert body["job"]["status"] == "failed"
     assert body["verification"]["passed"] is False
 
-    # Client refunded — escrow returned, but verification fee is charged even on failure
-    # $500 - $100 (funded) + $100 (refund) - $0.05 (verify fee) = $499.95
+    # Client refunded — escrow returned, verification fee shifted to seller on failure
+    # $500 - $100 (funded) + $100 (refund) = $500.00 (client made whole)
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "499.95"
+    assert resp.json()["balance"] == "500.00"
 
 
 @pytest.mark.asyncio

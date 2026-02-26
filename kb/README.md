@@ -7,6 +7,7 @@ Complete documentation for the Agent Registry platform. All documentation is der
 - [Models](models/) - Database schema and ORM models
 - [Architecture](architecture/) - System design and components
 - [API Reference](api/) - REST API endpoints
+- [Tests](tests/) - Test suite and execution guide
 
 ## Quick Start
 
@@ -39,6 +40,7 @@ Database tables and SQLAlchemy ORM models.
 | [Wallet](models/wallet.md) | USDC deposits and withdrawals |
 | [Review](models/review.md) | Ratings and reputation |
 | [Webhook](models/webhook.md) | Event delivery tracking |
+| [Tests](tests/README.md) | Test suite documentation |
 
 ## Architecture
 
@@ -170,7 +172,8 @@ uvicorn app.main:app --reload
 3. Add business logic in `app/services/`
 4. Add model in `app/models/` (if needed)
 5. Create migration (if model changed)
-6. Update Knowledge Base documentation
+6. Add tests in `tests/test_<module>.py`
+7. Update Knowledge Base documentation
 
 ### Deploying to Staging
 

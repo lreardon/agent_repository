@@ -185,6 +185,21 @@ async def verify_job(
         escrow = await escrow_service.release_escrow(db, job_id)
         job = await job_service.get_job(db, job_id)
     else:
+        # Verification failed — seller is responsible for the compute cost.
+        # Refund client's verification fee, charge seller instead.
+        from app.models.agent import Agent
+        from sqlalchemy import select as sel
+
+        # Refund client
+        client_row = await db.execute(sel(Agent).where(Agent.agent_id == auth.agent_id).with_for_update())
+        client_agent = client_row.scalar_one()
+        client_agent.balance += verify_fee.amount
+
+        # Charge seller (best-effort — if seller can't cover, platform absorbs)
+        seller_row = await db.execute(sel(Agent).where(Agent.agent_id == job.seller_agent_id).with_for_update())
+        seller_agent = seller_row.scalar_one()
+        if seller_agent.balance >= verify_fee.amount:
+            seller_agent.balance -= verify_fee.amount
         job = await job_service.fail_job(db, job_id, auth.agent_id)
 
     resp = VerifyResponse(

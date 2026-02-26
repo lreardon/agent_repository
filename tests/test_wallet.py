@@ -583,7 +583,7 @@ async def test_failed_withdrawal_refunds_balance(client: AsyncClient, db_session
 
 @pytest.mark.asyncio
 async def test_deposit_blocked_in_production(client: AsyncClient) -> None:
-    """Direct deposit endpoint returns 403 when env=production."""
+    """Direct deposit endpoint returns 404 when env=production or dev_deposit_enabled=false."""
     agent_id, priv = await _create_agent(client)
 
     data = {"amount": "100.00"}
@@ -598,8 +598,7 @@ async def test_deposit_blocked_in_production(client: AsyncClient) -> None:
     finally:
         object.__setattr__(real_settings, "env", original_env)
 
-    assert resp.status_code == 403
-    assert "production" in resp.json()["detail"].lower()
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

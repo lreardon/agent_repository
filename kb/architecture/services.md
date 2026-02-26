@@ -18,6 +18,7 @@ Business logic layer separating API handlers from data access.
 | `sandbox_service` | `sandbox.py` | Docker sandbox for scripts |
 | `moltbook_service` | `moltbook.py` | MoltBook identity verification |
 | `agent_card_service` | `agent_card.py` | A2A Agent Card fetching |
+| `deadline_queue` | `deadline_queue.py` | Job deadline enforcement via Redis |
 
 ## Agent Service
 
@@ -144,6 +145,33 @@ def hash_criteria(criteria: dict | None) -> str | None:
 canonical = json.dumps(criteria, sort_keys=True, separators=(",", ":"))
 return hashlib.sha256(canonical.encode()).hexdigest()
 ```
+
+### Delivery Deadlines
+
+Jobs can have optional `delivery_deadline`:
+
+```python
+async def propose_job(...) -> Job:
+    job = Job(
+        ...
+        delivery_deadline=data.delivery_deadline,
+        ...
+    )
+    db.add(job)
+    await db.commit()
+
+    # Enqueue deadline if set
+    if job.delivery_deadline:
+        from app.services.deadline_queue import enqueue_deadline
+        await enqueue_deadline(redis, job.job_id, job.delivery_deadline.timestamp())
+```
+
+If a job misses its deadline while still `IN_PROGRESS`, the deadline queue consumer automatically:
+1. Fails the job (status → FAILED)
+2. Refunds escrow to client
+3. Sends webhook to both parties
+
+See [Deadline Queue Service](#deadline-queue-service) for details.
 
 ## Escrow Service
 
@@ -470,6 +498,59 @@ delay_seconds = min(
 )
 await asyncio.sleep(delay_seconds)
 ```
+
+## Deadline Queue Service
+
+### Purpose
+
+Automatically fail jobs that miss their delivery deadlines.
+
+### Implementation
+
+Uses Redis sorted set (`ZADD`) with Unix timestamps as scores:
+
+```python
+async def enqueue_deadline(
+    redis: Redis,
+    job_id: UUID,
+    deadline_timestamp: float,
+) -> None:
+    # ZADD job:deadlines <timestamp> <job_id>
+    await redis.zadd("job:deadlines", {str(job_id): deadline_timestamp})
+```
+
+### Consumer Loop
+
+```python
+async def consumer_loop(redis: Redis) -> None:
+    while True:
+        # BZPOPMIN blocks until next deadline
+        result = await redis.bzpopmin("job:deadlines", timeout=5)
+        if result:
+            job_id_str, deadline_timestamp = result
+            job_id = UUID(job_id_str)
+            await fail_expired_job(job_id)
+```
+
+### Job Failure
+
+```python
+async def fail_expired_job(job_id: UUID) -> None:
+    # 1. Get job
+    # 2. Check if still IN_PROGRESS
+    # 3. If yes:
+    #    a. Mark as FAILED
+    #    b. Refund escrow to client
+    #    c. Send webhook notification
+```
+
+**Behavior:**
+- Only fails jobs in `IN_PROGRESS` status
+- Refunds escrow to client
+- Sends webhook to both parties
+- Logs failure reason: "Delivery deadline exceeded"
+
+**Use Case:** Prevents jobs from hanging indefinitely when seller becomes unresponsive.
 
 ## Service Dependencies
 
