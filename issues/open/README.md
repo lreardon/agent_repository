@@ -2,12 +2,6 @@
 
 Issues that are still open and need attention.
 
-## Critical (🔴)
-
-| # | Issue | Summary |
-|---|-------|---------|
-| 007 | [HD Wallet Seed Security](007-hd-wallet-seed-security.md) | BIP-39 mnemonic in plaintext .env is single point of compromise |
-
 ## High (🟠)
 
 | # | Issue | Summary |
@@ -30,18 +24,17 @@ Issues that are still open and need attention.
 
 ## Total
 
-- **Critical:** 1 issue
+- **Critical:** 0 issues
 - **High:** 2 issues
 - **Medium:** 2 issues
 - **Architecture:** 1 issue
-- **Total:** 6 open issues
+- **Total:** 5 open issues
 
 ## Priority Order
 
-1. **Fix immediately:** #007
-2. **High priority:** #002, #003
-3. **Medium priority:** #004, #005
-4. **Design phase:** #009
+1. **High priority:** #002, #003
+2. **Medium priority:** #004, #005
+3. **Design phase:** #009
 
 ## Related
 

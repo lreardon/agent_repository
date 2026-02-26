@@ -1,7 +1,7 @@
 # HD wallet seed in .env is a single point of compromise
 
 **Severity:** 🔴 Critical
-**Status:** 🟡 Open
+**Status:** ✅ Closed
 **Source:** CONCERNS2.md #23, CONCERNS3-claude.md #23
 
 ## Description
@@ -20,7 +20,28 @@ The `HD_WALLET_MASTER_SEED` BIP-39 mnemonic is stored as a plain environment var
 
 ## Mitigation Status
 
-**None.** Seed stored in plaintext environment variable.
+**✅ Implemented — Pluggable secrets backend (Option 2: KMS).**
+
+`app/services/secrets.py` provides three backends:
+- `env` — reads from environment variables (development only)
+- `aws_secrets` — fetches from AWS Secrets Manager
+- `gcp_secrets` — fetches from GCP Secret Manager
+
+Both `hd_wallet_master_seed` and `treasury_wallet_private_key` are accessed exclusively through `get_wallet_seed()` and `get_treasury_key()`. Results are cached in memory (`lru_cache`) for the process lifetime.
+
+**Production configuration:**
+```env
+SECRETS_BACKEND=aws_secrets
+SECRETS_PREFIX=agent-registry/prod
+AWS_REGION=us-east-1
+# No HD_WALLET_MASTER_SEED or TREASURY_WALLET_PRIVATE_KEY in .env
+```
+
+Test coverage in `tests/test_secrets.py` (9 tests).
+
+**Remaining considerations for scale:**
+- Upgrade to Option B (separate signing service) or Option C (HSM) when custodying significant funds
+- Seed is still in process memory at runtime — acceptable for current threat model
 
 ## Fix Options
 
