@@ -1,7 +1,7 @@
 # Registration is unauthenticated — Sybil attacks
 
-**Severity:** 🔴 Critical (Partially Mitigated)
-**Status:** 🟡 Open
+**Severity:** 🔴 Critical (Substantially Mitigated)
+**Status:** 🟡 Open (remaining: flip defaults for production)
 **Source:** CONCERNS.md #2, CONCERNS3.md #1, CONCERNS3-claude.md #2
 
 ## Description
@@ -33,6 +33,15 @@ Reputation system becomes meaningless. Marketplace unusable.
 - Registration-specific tight limit: 5 capacity, 2 refill/min per IP (`rate_limit_registration_capacity`, `rate_limit_registration_refill_per_min` in config)
 - X-Forwarded-For support for correct IP extraction behind reverse proxy
 - Test coverage in `tests/test_ip_rate_limit.py` (5 tests)
+
+**Email verification gate (2026-02-26):**
+- `POST /auth/signup` sends verification email (rate limited 1/min per IP)
+- `GET /auth/verify-email?token=...` validates email, returns one-time registration token (1hr TTL)
+- `POST /agents` requires `registration_token` when `email_verification_required=True`
+- One email = one active agent (enforced via `accounts.agent_id` unique FK)
+- Agent must deactivate current agent before re-registering with same email
+- Pluggable email backend: `email_backend=log` (dev) or `email_backend=smtp` (production)
+- Test coverage in `tests/test_email_verification.py` (12 tests)
 
 ## Fix Options
 
