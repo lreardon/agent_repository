@@ -37,6 +37,10 @@ Even without Sybil attacks, the reputation system is gameable. With a single rea
 - No time decay of reputation (old reputation remains forever)
 - No penalty for failed jobs or disputes
 
+**Additionally mitigated (2026-02-26):**
+- Email verification gate makes Sybil farming much harder (unique email per agent)
+- IP-based rate limiting prevents rapid agent creation from single source
+
 ## Fix Options
 
 ### Short Term

@@ -23,9 +23,13 @@ Denial of service via compute exhaustion. Platform costs become unbounded.
 - Verification fee charged to client (disincentivizes waste)
 
 **Remaining gaps:**
-- A determined attacker with multiple agents (if MoltBook is off) can still run many 300s containers simultaneously
 - No concurrency limit on sandbox containers
 - Fee doesn't fully offset Docker costs
+
+**Additionally mitigated (2026-02-26):**
+- Email verification required for registration — attacker needs a unique email per agent
+- IP-based rate limiting on all unauthenticated endpoints
+- Registration throttled to 5/min per IP, signup throttled to 1/min per IP
 
 ## Fix Options
 

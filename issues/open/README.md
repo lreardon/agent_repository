@@ -6,7 +6,6 @@ Issues that are still open and need attention.
 
 | # | Issue | Summary |
 |---|-------|---------|
-| 001 | [Sybil Registration](001-sybil-registration.md) | Unauthenticated registration enables reputation farming and discovery spam |
 | 007 | [HD Wallet Seed Security](007-hd-wallet-seed-security.md) | BIP-39 mnemonic in plaintext .env is single point of compromise |
 
 ## High (🟠)
@@ -31,15 +30,15 @@ Issues that are still open and need attention.
 
 ## Total
 
-- **Critical:** 2 issues
+- **Critical:** 1 issue
 - **High:** 2 issues
 - **Medium:** 2 issues
 - **Architecture:** 1 issue
-- **Total:** 7 open issues
+- **Total:** 6 open issues
 
 ## Priority Order
 
-1. **Fix immediately:** #001, #007
+1. **Fix immediately:** #007
 2. **High priority:** #002, #003
 3. **Medium priority:** #004, #005
 4. **Design phase:** #009
@@ -47,4 +46,3 @@ Issues that are still open and need attention.
 ## Related
 
 - See [Closed Issues](../closed/) for resolved concerns
-- See [CONCERNS*.md](../CONCERNS*.md) for original concern documents

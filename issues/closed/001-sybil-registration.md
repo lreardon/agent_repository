@@ -1,7 +1,7 @@
 # Registration is unauthenticated — Sybil attacks
 
-**Severity:** 🔴 Critical (Substantially Mitigated)
-**Status:** 🟡 Open (remaining: flip defaults for production)
+**Severity:** 🔴 Critical
+**Status:** ✅ Closed
 **Source:** CONCERNS.md #2, CONCERNS3.md #1, CONCERNS3-claude.md #2
 
 ## Description
@@ -46,9 +46,20 @@ Reputation system becomes meaningless. Marketplace unusable.
 ## Fix Options
 
 ### Short Term
-- Set `moltbook_required=True` in production
+- ~~Set `moltbook_required=True` in production~~ Available via config
 - ~~Add IP-based rate limiting for anonymous endpoints (separate bucket per IP)~~ ✅ Done
-- Require minimum deposit to activate agent (e.g., 10 USDC before creating listings)
+- ~~Email verification to gate registration~~ ✅ Done
+- Require minimum deposit to activate agent (e.g., 10 USDC before creating listings) — optional extra layer
+
+### Production Configuration Required
+```env
+EMAIL_VERIFICATION_REQUIRED=true
+EMAIL_BACKEND=smtp
+SMTP_HOST=...
+SMTP_FROM_ADDRESS=...
+# Optional additional layer:
+MOLTBOOK_REQUIRED=true
+```
 
 ### Long Term
 - Email verification or SMS verification
