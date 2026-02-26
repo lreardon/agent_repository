@@ -37,8 +37,8 @@ VALID_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.DELIVERED: {JobStatus.VERIFYING, JobStatus.FAILED},
     JobStatus.VERIFYING: {JobStatus.COMPLETED, JobStatus.FAILED},
     JobStatus.COMPLETED: set(),
-    JobStatus.FAILED: {JobStatus.DISPUTED},
-    JobStatus.DISPUTED: {JobStatus.RESOLVED},
+    JobStatus.FAILED: set(),  # V2: {JobStatus.DISPUTED}
+    JobStatus.DISPUTED: set(),  # V2: {JobStatus.RESOLVED}
     JobStatus.RESOLVED: set(),
     JobStatus.CANCELLED: set(),
 }

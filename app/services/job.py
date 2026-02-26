@@ -238,15 +238,19 @@ async def fail_job(
 async def dispute_job(
     db: AsyncSession, job_id: uuid.UUID, agent_id: uuid.UUID
 ) -> Job:
-    """Either party disputes a failed job."""
-    job = await _get_job(db, job_id)
-    _assert_party(job, agent_id)
-    _assert_transition(job.status, JobStatus.DISPUTED)
-
-    job.status = JobStatus.DISPUTED
-    await db.commit()
-    await db.refresh(job)
-    return job
+    """Either party disputes a failed job. V1: disabled — use reviews instead."""
+    raise HTTPException(
+        status_code=501,
+        detail="Dispute resolution is not available in V1. Use reviews to provide feedback on completed or failed jobs.",
+    )
+    # V2: re-enable dispute flow
+    # job = await _get_job(db, job_id)
+    # _assert_party(job, agent_id)
+    # _assert_transition(job.status, JobStatus.DISPUTED)
+    # job.status = JobStatus.DISPUTED
+    # await db.commit()
+    # await db.refresh(job)
+    # return job
 
 
 async def get_job(db: AsyncSession, job_id: uuid.UUID) -> Job:
