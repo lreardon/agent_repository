@@ -51,22 +51,22 @@ async def _recover_wallet_tasks() -> None:
         logger.exception("Wallet task recovery failed")
 
 
-async def _recover_deadlines() -> None:
+async def _recover_deadlines(session_factory=None, redis_client=None) -> None:
     """Re-enqueue deadlines for active jobs after server restart.
 
     ZADD is idempotent — re-adding an existing job_id with the same score
     is a no-op, so this is safe to call unconditionally at startup.
     """
-    from app.database import async_session_factory
+    if session_factory is None:
+        from app.database import async_session_factory as session_factory
     from app.models.job import Job, JobStatus
-    from app.services.deadline_queue import DEADLINE_KEY, enqueue_deadline
-    from app.redis import redis_pool
+    from app.services.deadline_queue import enqueue_deadline
     from sqlalchemy import select
 
     import redis.asyncio as aioredis
 
     try:
-        async with async_session_factory() as db:
+        async with session_factory() as db:
             result = await db.execute(
                 select(Job).where(
                     Job.status.in_([
@@ -83,14 +83,19 @@ async def _recover_deadlines() -> None:
                 logger.info("Deadline recovery: no active jobs with deadlines")
                 return
 
-            redis = aioredis.Redis(connection_pool=redis_pool)
+            own_redis = False
+            if redis_client is None:
+                from app.redis import redis_pool
+                redis_client = aioredis.Redis(connection_pool=redis_pool)
+                own_redis = True
             try:
                 for job in jobs:
                     await enqueue_deadline(
-                        redis, job.job_id, job.delivery_deadline.timestamp()
+                        redis_client, job.job_id, job.delivery_deadline.timestamp()
                     )
             finally:
-                await redis.aclose()
+                if own_redis:
+                    await redis_client.aclose()
 
             logger.info("Deadline recovery: re-enqueued %d deadlines", len(jobs))
 

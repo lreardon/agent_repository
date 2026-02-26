@@ -207,9 +207,7 @@ async def test_recover_deadlines_enqueues_active_jobs(
             "no_deadline": str(job_no_deadline.job_id),
         }
 
-    with patch("app.database.async_session_factory", test_db), \
-         patch("app.database.async_session", test_db):
-        await _recover_deadlines()
+    await _recover_deadlines(session_factory=test_db, redis_client=redis_client)
 
     members = {m.decode() for m in await redis_client.zrange(DEADLINE_KEY, 0, -1)}
     assert ids["funded"] in members
@@ -223,8 +221,6 @@ async def test_recover_deadlines_enqueues_active_jobs(
 async def test_recover_deadlines_empty_db(test_db, redis_client: aioredis.Redis) -> None:
     from app.main import _recover_deadlines
 
-    with patch("app.database.async_session_factory", test_db), \
-         patch("app.database.async_session", test_db):
-        await _recover_deadlines()
+    await _recover_deadlines(session_factory=test_db, redis_client=redis_client)
 
     assert await redis_client.zcard(DEADLINE_KEY) == 0
