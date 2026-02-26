@@ -479,8 +479,8 @@ async def test_fail_funded_job_auto_refunds(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispute_failed_job(client: AsyncClient) -> None:
-    """J9: Dispute a failed job."""
+async def test_dispute_disabled_v1(client: AsyncClient) -> None:
+    """J9: Disputes return 501 in V1 — use reviews instead."""
     job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
 
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
@@ -489,37 +489,32 @@ async def test_dispute_failed_job(client: AsyncClient) -> None:
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/fail", b"")
     await client.post(f"/jobs/{job_id}/fail", headers=headers)
 
-    # Client disputes
+    # Client attempts dispute — disabled in V1
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/dispute", b"")
     resp = await client.post(f"/jobs/{job_id}/dispute", headers=headers)
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "disputed"
+    assert resp.status_code == 501
+    assert "V1" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_cannot_dispute_non_failed_job(client: AsyncClient) -> None:
-    """J10: Cannot dispute a job that isn't failed."""
+async def test_dispute_disabled_for_non_failed_job(client: AsyncClient) -> None:
+    """J10: Disputes return 501 regardless of job state in V1."""
     job_id, client_id, client_priv, _, _ = await _get_funded_job(client)
 
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/dispute", b"")
     resp = await client.post(f"/jobs/{job_id}/dispute", headers=headers)
-    assert resp.status_code == 409
+    assert resp.status_code == 501
 
 
 @pytest.mark.asyncio
-async def test_third_party_cannot_dispute(client: AsyncClient) -> None:
-    """J11: Third party cannot dispute."""
+async def test_dispute_disabled_for_third_party(client: AsyncClient) -> None:
+    """J11: Disputes return 501 even for third parties in V1."""
     job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
-
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
-    await client.post(f"/jobs/{job_id}/start", headers=headers)
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/fail", b"")
-    await client.post(f"/jobs/{job_id}/fail", headers=headers)
 
     intruder_id, intruder_priv = await _create_agent(client)
     headers = make_auth_headers(intruder_id, intruder_priv, "POST", f"/jobs/{job_id}/dispute", b"")
     resp = await client.post(f"/jobs/{job_id}/dispute", headers=headers)
-    assert resp.status_code == 403
+    assert resp.status_code == 501
 
 
 @pytest.mark.asyncio

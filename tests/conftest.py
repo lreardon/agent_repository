@@ -21,11 +21,14 @@ from app.utils.crypto import generate_keypair
 @pytest.fixture(autouse=True)
 def _isolate_settings() -> None:
     """Snapshot settings before each test and restore after to prevent mutation bleed.
+    Also enable dev deposit for tests.
 
     Uses object.__setattr__ to mutate the *same* Settings instance in-place,
     since app modules hold direct references via `from app.config import settings`.
     """
     original = settings.model_dump()
+    # Enable dev deposit endpoint for tests
+    object.__setattr__(settings, "dev_deposit_enabled", True)
     yield  # type: ignore[misc]
     for key, value in original.items():
         object.__setattr__(settings, key, value)
