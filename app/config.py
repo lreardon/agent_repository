@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     rate_limit_read_refill_per_min: int = 60
     rate_limit_write_capacity: int = 30
     rate_limit_write_refill_per_min: int = 10
+    rate_limit_registration_capacity: int = 5
+    rate_limit_registration_refill_per_min: int = 2
 
     # A2A
     require_agent_card: bool = True  # Set False in tests to skip Agent Card fetch
