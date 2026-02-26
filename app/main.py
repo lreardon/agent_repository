@@ -51,6 +51,53 @@ async def _recover_wallet_tasks() -> None:
         logger.exception("Wallet task recovery failed")
 
 
+async def _recover_deadlines() -> None:
+    """Re-enqueue deadlines for active jobs after server restart.
+
+    ZADD is idempotent — re-adding an existing job_id with the same score
+    is a no-op, so this is safe to call unconditionally at startup.
+    """
+    from app.database import async_session_factory
+    from app.models.job import Job, JobStatus
+    from app.services.deadline_queue import DEADLINE_KEY, enqueue_deadline
+    from app.redis import redis_pool
+    from sqlalchemy import select
+
+    import redis.asyncio as aioredis
+
+    try:
+        async with async_session_factory() as db:
+            result = await db.execute(
+                select(Job).where(
+                    Job.status.in_([
+                        JobStatus.FUNDED,
+                        JobStatus.IN_PROGRESS,
+                        JobStatus.DELIVERED,
+                    ]),
+                    Job.delivery_deadline.isnot(None),
+                )
+            )
+            jobs = list(result.scalars().all())
+
+            if not jobs:
+                logger.info("Deadline recovery: no active jobs with deadlines")
+                return
+
+            redis = aioredis.Redis(connection_pool=redis_pool)
+            try:
+                for job in jobs:
+                    await enqueue_deadline(
+                        redis, job.job_id, job.delivery_deadline.timestamp()
+                    )
+            finally:
+                await redis.aclose()
+
+            logger.info("Deadline recovery: re-enqueued %d deadlines", len(jobs))
+
+    except Exception:
+        logger.exception("Deadline recovery failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown."""
@@ -58,6 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.deadline_queue import run_deadline_consumer
     deadline_task = asyncio.create_task(run_deadline_consumer())
     await _recover_wallet_tasks()
+    await _recover_deadlines()
 
     yield
 
