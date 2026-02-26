@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import ARRAY, CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import ARRAY, CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -19,6 +19,7 @@ class Review(Base):
     __tablename__ = "reviews"
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="ck_reviews_rating"),
+        UniqueConstraint("job_id", "reviewer_agent_id", name="uq_reviews_job_reviewer"),
     )
 
     review_id: Mapped[uuid.UUID] = mapped_column(
