@@ -27,8 +27,9 @@ def _isolate_settings() -> None:
     since app modules hold direct references via `from app.config import settings`.
     """
     original = settings.model_dump()
-    # Enable dev deposit endpoint for tests
+    # Enable dev deposit endpoint for tests, disable email verification gate
     object.__setattr__(settings, "dev_deposit_enabled", True)
+    object.__setattr__(settings, "email_verification_required", False)
     yield  # type: ignore[misc]
     for key, value in original.items():
         object.__setattr__(settings, key, value)

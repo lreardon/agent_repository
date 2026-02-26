@@ -60,9 +60,11 @@ def _derive_address(index: int) -> str:
     """
     from eth_account import Account
 
+    from app.services.secrets import get_wallet_seed
+
     Account.enable_unaudited_hdwallet_features()
     acct = Account.from_mnemonic(
-        settings.hd_wallet_master_seed,
+        get_wallet_seed(),
         account_path=f"m/44'/60'/0'/0/{index}",
     )
     return acct.address
@@ -100,7 +102,10 @@ async def get_or_create_deposit_address(
     )
     next_index = max_idx_result.scalar() + 1
 
-    if not settings.hd_wallet_master_seed:
+    from app.services.secrets import get_wallet_seed
+    try:
+        get_wallet_seed()
+    except ValueError:
         raise HTTPException(
             status_code=503,
             detail="Wallet infrastructure not configured (missing HD seed)",
@@ -255,7 +260,11 @@ async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
     """Background task: send USDC on-chain for a single withdrawal."""
     from app.database import async_session
 
-    if not settings.treasury_wallet_private_key:
+    from app.services.secrets import get_treasury_key
+
+    try:
+        treasury_key = get_treasury_key()
+    except ValueError:
         logger.error("Treasury wallet not configured — cannot process withdrawal %s", withdrawal_id)
         return
 
@@ -263,7 +272,7 @@ async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
     from web3 import AsyncWeb3, AsyncHTTPProvider
 
     w3 = AsyncWeb3(AsyncHTTPProvider(settings.resolved_rpc_url))
-    treasury = Account.from_key(settings.treasury_wallet_private_key)
+    treasury = Account.from_key(treasury_key)
     usdc = w3.eth.contract(
         address=w3.to_checksum_address(settings.resolved_usdc_address),
         abi=ERC20_TRANSFER_ABI,

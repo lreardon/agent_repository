@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     signature_max_age_seconds: int = 30
     nonce_ttl_seconds: int = 60
 
+    # Secrets backend
+    secrets_backend: str = "env"  # "env" | "aws_secrets" | "gcp_secrets"
+    secrets_prefix: str = ""  # AWS: secret name/prefix, GCP: project ID
+    aws_region: str = "us-east-1"
+    gcp_project_id: str = ""
+
     # Blockchain / Wallet
     blockchain_network: str = "base_sepolia"  # "base_sepolia" or "base_mainnet"
     blockchain_rpc_url: str = ""  # Auto-set from network if empty

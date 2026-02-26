@@ -52,11 +52,7 @@ async def test_deposit_address_requires_seed(client: AsyncClient) -> None:
     agent_id, priv = await _create_agent(client)
     headers = make_auth_headers(agent_id, priv, "GET", f"/agents/{agent_id}/wallet/deposit-address")
 
-    with patch("app.services.wallet.settings") as mock_settings:
-        mock_settings.hd_wallet_master_seed = ""
-        mock_settings.min_deposit_amount = Decimal("1.00")
-        mock_settings.blockchain_network = "base_sepolia"
-        mock_settings.resolved_usdc_address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+    with patch("app.services.secrets.get_wallet_seed", side_effect=ValueError("not found")):
         resp = await client.get(f"/agents/{agent_id}/wallet/deposit-address", headers=headers)
 
     assert resp.status_code == 503
