@@ -34,6 +34,8 @@ resource "google_project_service" "apis" {
     "vpcaccess.googleapis.com",
     "cloudtasks.googleapis.com",
     "compute.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
   ])
 
   project            = var.project_id
@@ -123,6 +125,18 @@ resource "google_cloud_tasks_queue" "webhook_delivery" {
     max_backoff        = "1800s"
     max_retry_duration = "0s"
   }
+
+  depends_on = [google_project_service.apis]
+}
+
+# --------------------------------------------------------------------------
+# CI/CD — Workload Identity Federation for GitHub Actions
+# --------------------------------------------------------------------------
+module "ci_cd" {
+  source = "./modules/ci-cd"
+
+  project_id  = var.project_id
+  github_repo = "lreardon/agent_repository"
 
   depends_on = [google_project_service.apis]
 }

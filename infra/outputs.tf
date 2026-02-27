@@ -32,3 +32,13 @@ output "webhook_queue_name" {
   description = "Cloud Tasks queue name for webhook delivery"
   value       = google_cloud_tasks_queue.webhook_delivery.name
 }
+
+output "wif_provider" {
+  description = "Workload Identity Federation provider (for GitHub Actions auth action)"
+  value       = module.ci_cd.workload_identity_provider
+}
+
+output "ci_service_account_email" {
+  description = "CI/CD service account email (for GitHub Actions auth action)"
+  value       = module.ci_cd.service_account_email
+}

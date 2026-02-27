@@ -89,9 +89,10 @@ resource "google_cloud_run_v2_service" "api" {
         value = "redis://${var.redis_host}:${var.redis_port}/0"
       }
 
+      # Components for DATABASE_URL (assembled by docker-entrypoint.sh)
       env {
-        name  = "DB_HOST"
-        value = "/cloudsql/${var.cloud_sql_connection}"
+        name  = "CLOUD_SQL_CONNECTION"
+        value = var.cloud_sql_connection
       }
 
       env {
@@ -102,6 +103,21 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "DB_USER"
         value = "api_user"
+      }
+
+      env {
+        name  = "RUN_MIGRATIONS"
+        value = "true"
+      }
+
+      env {
+        name  = "SECRETS_BACKEND"
+        value = "gcp_secrets"
+      }
+
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
       }
 
       # --- Secrets mounted as env vars ---

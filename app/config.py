@@ -50,9 +50,8 @@ class Settings(BaseSettings):
     nonce_ttl_seconds: int = 60
 
     # Secrets backend
-    secrets_backend: str = "env"  # "env" | "aws_secrets" | "gcp_secrets"
-    secrets_prefix: str = ""  # AWS: secret name/prefix, GCP: project ID
-    aws_region: str = "us-east-1"
+    secrets_backend: str = "env"  # "env" | "gcp_secrets"
+    secrets_prefix: str = ""  # GCP: project ID (or use gcp_project_id)
     gcp_project_id: str = ""
 
     # Blockchain / Wallet

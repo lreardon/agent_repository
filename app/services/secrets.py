@@ -2,14 +2,12 @@
 
 Supports:
 - env: Read from environment variables / .env file (default, dev only)
-- aws_secrets: AWS Secrets Manager
-- gcp_secrets: GCP Secret Manager
+- gcp_secrets: GCP Secret Manager (production)
 
-Configure via SECRETS_BACKEND and SECRETS_PREFIX in settings.
+Configure via SECRETS_BACKEND and GCP_PROJECT_ID in settings.
 Secrets are fetched once at startup and cached in memory.
 """
 
-import json
 import logging
 from functools import lru_cache
 
@@ -30,32 +28,6 @@ def _fetch_from_env(key: str) -> str:
     return value
 
 
-def _fetch_from_aws(key: str) -> str:
-    """Read secret from AWS Secrets Manager.
-
-    Expects SECRETS_PREFIX to be the secret name (e.g., 'agent-registry/prod').
-    The secret value should be a JSON object with keys matching the secret names.
-    """
-    import boto3
-
-    client = boto3.client("secretsmanager", region_name=settings.aws_region)
-    secret_id = f"{settings.secrets_prefix}/{key}" if settings.secrets_prefix else key
-
-    try:
-        response = client.get_secret_value(SecretId=secret_id)
-    except client.exceptions.ResourceNotFoundException:
-        # Try as a JSON bundle under the prefix
-        if settings.secrets_prefix:
-            response = client.get_secret_value(SecretId=settings.secrets_prefix)
-            bundle = json.loads(response["SecretString"])
-            if key not in bundle:
-                raise ValueError(f"Secret '{key}' not found in AWS secret '{settings.secrets_prefix}'")
-            return bundle[key]
-        raise ValueError(f"Secret '{key}' not found in AWS Secrets Manager")
-
-    return response["SecretString"]
-
-
 def _fetch_from_gcp(key: str) -> str:
     """Read secret from GCP Secret Manager.
 
@@ -74,7 +46,6 @@ def _fetch_from_gcp(key: str) -> str:
 
 _BACKENDS = {
     "env": _fetch_from_env,
-    "aws_secrets": _fetch_from_aws,
     "gcp_secrets": _fetch_from_gcp,
 }
 
