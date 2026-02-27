@@ -262,7 +262,7 @@ PLATFORM_FEE_PERCENT=0.025
 ### Dockerfile
 
 ```dockerfile
-FROM python:3.11-slim AS base
+FROM python:3.13-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev \
@@ -287,7 +287,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ```yaml
 steps:
-  - name: "python:3.11"
+  - name: "python:3.13"
     entrypoint: "bash"
     args:
       - "-c"

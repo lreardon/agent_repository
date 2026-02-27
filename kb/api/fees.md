@@ -32,7 +32,7 @@ GET /fees
     "per_cpu_second": "0.01",
     "minimum": "0.05",
     "description": "Charged to client when triggering /verify",
-    "runtime": "python:3.11"
+    "runtime": "python:3.13"
   },
   "storage_fee": {
     "per_kb": "0.001",

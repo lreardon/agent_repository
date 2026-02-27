@@ -102,7 +102,7 @@ if not isinstance(data, list) or len(data) < 3:
     sys.exit(1)
 print(f"Validated {len(data)} records")
 """
-    criteria = {"script": _b64(script), "runtime": "python:3.11", "timeout_seconds": 30}
+    criteria = {"script": _b64(script), "runtime": "python:3.13", "timeout_seconds": 30}
 
     job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv, criteria)
 
@@ -148,7 +148,7 @@ if len(data) < 100:
     print(f"Need 100+ records, got {len(data)}", file=sys.stderr)
     sys.exit(1)
 """
-    criteria = {"script": _b64(script), "runtime": "python:3.11"}
+    criteria = {"script": _b64(script), "runtime": "python:3.13"}
 
     job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv, criteria)
 
@@ -195,7 +195,7 @@ async def test_script_criteria_validation_on_proposal(client: AsyncClient) -> No
     # Timeout too large
     data["acceptance_criteria"] = {
         "script": _b64("print('hi')"),
-        "runtime": "python:3.11",
+        "runtime": "python:3.13",
         "timeout_seconds": 9999,
     }
     body_bytes = json.dumps(data).encode()

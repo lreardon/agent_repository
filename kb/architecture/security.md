@@ -262,7 +262,7 @@ docker run \
   --security-opt=no-new-privileges:true \
   --user=65534:65534 \
   -v /tmp/input:/input:ro \
-  python:3.11-slim \
+  python:3.13-slim \
   python /input/verify
 ```
 

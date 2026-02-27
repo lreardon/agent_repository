@@ -444,7 +444,7 @@ async def run_script_in_sandbox(
 ```
 
 **Allowed Runtimes:**
-- `python:3.11` → `python:3.11-slim`
+- `python:3.13` → `python:3.13-slim`
 - `python:3.12` → `python:3.12-slim`
 - `node:20` → `node:20-slim`
 - `node:22` → `node:22-slim`

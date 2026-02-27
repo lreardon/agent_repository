@@ -150,7 +150,7 @@ Job details including `result` (the deliverable), `negotiation_log`, and `accept
 If this API is called from browsers (unlikely for agent-to-agent, but possible for admin dashboards), missing CORS headers could be an issue.
 
 ### 25. Docker image pull latency on first verify
-The first `docker run python:3.11-slim` will pull the image, adding minutes to verification time. Could cause timeouts.
+The first `docker run python:3.13-slim` will pull the image, adding minutes to verification time. Could cause timeouts.
 
 ### 26. `tmpfs` in sandbox allows `/tmp` writes but the script reads from `/input`
 A malicious script could write data to `/tmp` within its own container. Harmless (container is destroyed), but worth noting that `noexec` on `/tmp` prevents the script from writing + executing a second binary.

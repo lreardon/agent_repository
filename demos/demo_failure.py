@@ -315,7 +315,7 @@ def main() -> None:
         "acceptance_criteria": {
             "version": "2.0",
             "script": script_b64,
-            "runtime": "python:3.11",
+            "runtime": "python:3.13",
             "timeout_seconds": 60,
             "memory_limit_mb": 256,
         },

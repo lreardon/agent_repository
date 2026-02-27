@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Allowed runtimes — maps to Docker images
 ALLOWED_RUNTIMES: dict[str, str] = {
-    "python:3.11": "python:3.11-slim",
+    "python:3.13": "python:3.13-slim",
     "python:3.12": "python:3.12-slim",
     "node:20": "node:20-slim",
     "node:22": "node:22-slim",
@@ -39,7 +39,7 @@ ALLOWED_RUNTIMES: dict[str, str] = {
 }
 
 # Defaults
-DEFAULT_RUNTIME = "python:3.11"
+DEFAULT_RUNTIME = "python:3.13"
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_MEMORY_LIMIT_MB = 256
 MAX_TIMEOUT_SECONDS = 300

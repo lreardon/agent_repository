@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-All 161 tests pass when using the project's virtual environment (`.direnv/python-3.11/bin/pytest`). **Significant coverage gaps** exist across validation edge cases, error handling, middleware, services, rate limiting, and the webhook system. Several endpoints and code paths have zero test coverage.
+All 161 tests pass when using the project's virtual environment (`.direnv/python-3.13/bin/pytest`). **Significant coverage gaps** exist across validation edge cases, error handling, middleware, services, rate limiting, and the webhook system. Several endpoints and code paths have zero test coverage.
 
 ---
 

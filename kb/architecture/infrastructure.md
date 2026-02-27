@@ -312,7 +312,7 @@ steps:
 ### Container Security
 
 - **Non-root user:** Run as non-root in Dockerfile
-- **Minimal base:** `python:3.11-slim`
+- **Minimal base:** `python:3.13-slim`
 - **No secrets in image:** All secrets via environment variables
 
 ## Backup and Disaster Recovery

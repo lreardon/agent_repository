@@ -31,7 +31,7 @@ class TestValidateScriptCriteria:
     def test_valid_python_script(self) -> None:
         criteria = {
             "script": _b64("import json\nprint('ok')"),
-            "runtime": "python:3.11",
+            "runtime": "python:3.13",
             "timeout_seconds": 30,
             "memory_limit_mb": 128,
         }
@@ -39,7 +39,7 @@ class TestValidateScriptCriteria:
 
     def test_missing_script(self) -> None:
         with pytest.raises(ValueError, match="must include 'script'"):
-            validate_script_criteria({"runtime": "python:3.11"})
+            validate_script_criteria({"runtime": "python:3.13"})
 
     def test_invalid_base64(self) -> None:
         with pytest.raises(ValueError, match="valid base64"):
@@ -58,7 +58,7 @@ class TestValidateScriptCriteria:
             })
 
     def test_default_runtime(self) -> None:
-        """No runtime specified should be valid (defaults to python:3.11)."""
+        """No runtime specified should be valid (defaults to python:3.13)."""
         validate_script_criteria({"script": _b64("print('ok')")})
 
     def test_timeout_too_large(self) -> None:
@@ -176,7 +176,7 @@ print(f"OK: {len(data)} items")
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable=[1, 2, 3, 4, 5],
-            runtime="python:3.11",
+            runtime="python:3.13",
             timeout_seconds=30,
         )
         assert result.passed
@@ -198,7 +198,7 @@ if len(data) < 100:
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable=[1, 2, 3],
-            runtime="python:3.11",
+            runtime="python:3.13",
             timeout_seconds=30,
         )
         assert not result.passed
@@ -232,7 +232,7 @@ print(f"All {len(data['records'])} records valid")
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable=deliverable,
-            runtime="python:3.11",
+            runtime="python:3.13",
         )
         assert result.passed
         assert "3 records valid" in result.stdout
@@ -279,7 +279,7 @@ except Exception as e:
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={},
-            runtime="python:3.11",
+            runtime="python:3.13",
             timeout_seconds=15,
         )
         assert result.passed
@@ -305,7 +305,7 @@ except OSError as e:
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={"safe": True},
-            runtime="python:3.11",
+            runtime="python:3.13",
         )
         assert result.passed
 
@@ -326,7 +326,7 @@ except (PermissionError, OSError):
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={},
-            runtime="python:3.11",
+            runtime="python:3.13",
         )
         assert result.passed
 
@@ -340,7 +340,7 @@ time.sleep(300)
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={},
-            runtime="python:3.11",
+            runtime="python:3.13",
             timeout_seconds=3,
         )
         assert not result.passed
@@ -353,7 +353,7 @@ time.sleep(300)
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={},
-            runtime="python:3.11",
+            runtime="python:3.13",
         )
         assert not result.passed
         assert result.exit_code != 0
@@ -370,7 +370,7 @@ for i in range(100_000_000):
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={},
-            runtime="python:3.11",
+            runtime="python:3.13",
             memory_limit_mb=64,  # Low limit to trigger OOM faster
             timeout_seconds=15,
         )
@@ -391,7 +391,7 @@ sys.exit(0)
         result = await run_script_in_sandbox(
             script_b64=_b64(script),
             deliverable={},
-            runtime="python:3.11",
+            runtime="python:3.13",
         )
         assert result.passed
         assert "UID" in result.stdout
