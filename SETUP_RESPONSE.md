@@ -41,14 +41,15 @@ terraform apply -var-file=staging.tfvars
 
 ## 5. Migrate Terraform State to GCS (recommended)
 
-After first successful apply:
+I have run:
 
 ```bash
 gsutil mb -l us-west1 gs://YOUR_PROJECT_ID-tf-state
+gsutil mb -l us-west1 -p YOUR_PROJECT_ID gs://agent-registry-tf-state
 gsutil versioning set on gs://YOUR_PROJECT_ID-tf-state
 ```
 
-Then uncomment the `backend "gcs"` block in `infra/main.tf`, update the bucket name, and run:
+I uncommented the `backend "gcs"` block in `infra/main.tf`, update the bucket name, and ran
 ```bash
 terraform init    # Will prompt to migrate state
 ```
@@ -60,6 +61,9 @@ Terraform creates the secret *shells* and the auto-generated DB password + signi
 ```bash
 PROJECT_ID=your-project-id
 
+
+I ran the below scripts to set secrests:
+
 # HD Wallet seed (BIP-39 mnemonic for per-agent deposit addresses)
 echo -n "your mnemonic phrase here" | \
   gcloud secrets create hd_wallet_master_seed --data-file=- --project=$PROJECT_ID
@@ -68,17 +72,20 @@ echo -n "your mnemonic phrase here" | \
 echo -n "your_private_key_hex" | \
   gcloud secrets create treasury_wallet_private_key --data-file=- --project=$PROJECT_ID
 
+
+The moltbook signup is not yet supported via Moltbook and is therefore not available at this time. Thus I did not run:
+
 # MoltBook API key (if using MoltBook identity)
 echo -n "moltdev_..." | \
   gcloud secrets create moltbook_api_key --data-file=- --project=$PROJECT_ID
 ```
 
-Grant the Cloud Run service account access:
+To grant the Cloud Run service account access, I ran the following:
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
 SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in hd_wallet_master_seed treasury_wallet_private_key moltbook_api_key; do
+for SECRET in hd_wallet_master_seed treasury_wallet_private_key; do
   gcloud secrets add-iam-policy-binding $SECRET \
     --member="serviceAccount:$SA" \
     --role="roles/secretmanager.secretAccessor" \
@@ -88,14 +95,14 @@ done
 
 ## 7. Configure GitHub Actions
 
-After `terraform apply`, grab the outputs:
+After `terraform apply`, I grabed the outputs:
 
 ```bash
 terraform output wif_provider
 terraform output ci_service_account_email
 ```
 
-Then set these as **GitHub repository variables** (Settings → Secrets and variables → Actions → Variables):
+And I set these as **GitHub repository variables** (Settings → Secrets and variables → Actions → Variables):
 
 | Variable                  | Value                                                              |
 |---------------------------|--------------------------------------------------------------------|

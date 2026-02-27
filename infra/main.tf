@@ -9,10 +9,10 @@ terraform {
   }
 
   # After first apply, uncomment and run `terraform init` to migrate state to GCS:
-  # backend "gcs" {
-  #   bucket = "agent-registry-tf-state"
-  #   prefix = "terraform/state"
-  # }
+  backend "gcs" {
+    bucket = "agent-registry-tf-state"
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {
