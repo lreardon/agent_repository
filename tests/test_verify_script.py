@@ -21,7 +21,7 @@ def _b64(script: str) -> str:
 
 
 _docker = pytest.mark.skipif(
-    os.environ.get("CI") or not shutil.which("docker"), reason="Docker sandbox not available",
+    bool(os.environ.get("CI")) or not shutil.which("docker"), reason="Docker sandbox not available",
 )
 
 

@@ -65,27 +65,27 @@ async def test_deposit_address_created_and_idempotent(client: AsyncClient) -> No
     agent_id, priv = await _create_agent(client)
     path = f"/agents/{agent_id}/wallet/deposit-address"
 
-    with patch("app.services.wallet._derive_address", return_value="0x" + "ab" * 20) as mock_derive:
-        with patch("app.services.wallet.settings") as mock_settings:
-            mock_settings.hd_wallet_master_seed = "test seed phrase here"
-            mock_settings.min_deposit_amount = Decimal("1.00")
-            mock_settings.blockchain_network = "base_sepolia"
-            mock_settings.resolved_usdc_address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+    with patch("app.services.wallet._derive_address", return_value="0x" + "ab" * 20) as mock_derive, \
+         patch("app.services.secrets.get_wallet_seed", return_value="test seed phrase here"), \
+         patch("app.services.wallet.settings") as mock_settings:
+        mock_settings.min_deposit_amount = Decimal("1.00")
+        mock_settings.blockchain_network = "base_sepolia"
+        mock_settings.resolved_usdc_address = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 
-            headers = make_auth_headers(agent_id, priv, "GET", path)
-            resp1 = await client.get(path, headers=headers)
-            assert resp1.status_code == 200
-            assert resp1.json()["address"] == "0x" + "ab" * 20
-            assert resp1.json()["network"] == "base_sepolia"
+        headers = make_auth_headers(agent_id, priv, "GET", path)
+        resp1 = await client.get(path, headers=headers)
+        assert resp1.status_code == 200
+        assert resp1.json()["address"] == "0x" + "ab" * 20
+        assert resp1.json()["network"] == "base_sepolia"
 
-            # Second call returns same address
-            headers = make_auth_headers(agent_id, priv, "GET", path)
-            resp2 = await client.get(path, headers=headers)
-            assert resp2.status_code == 200
-            assert resp2.json()["address"] == resp1.json()["address"]
+        # Second call returns same address
+        headers = make_auth_headers(agent_id, priv, "GET", path)
+        resp2 = await client.get(path, headers=headers)
+        assert resp2.status_code == 200
+        assert resp2.json()["address"] == resp1.json()["address"]
 
-            # derive_address only called once
-            mock_derive.assert_called_once()
+        # derive_address only called once
+        mock_derive.assert_called_once()
 
 
 @pytest.mark.asyncio
