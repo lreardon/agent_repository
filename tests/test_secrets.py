@@ -82,16 +82,23 @@ def test_gcp_backend_fetches_secret():
     mock_response.payload.data.decode.return_value = "gcp-seed-value"
     mock_client.access_secret_version.return_value = mock_response
 
-    mock_module = MagicMock()
-    mock_module.SecretManagerServiceClient.return_value = mock_client
+    mock_sm_module = MagicMock()
+    mock_sm_module.SecretManagerServiceClient.return_value = mock_client
+
+    # google.cloud mock must expose .secretmanager as our mock module
+    mock_gc = MagicMock()
+    mock_gc.secretmanager = mock_sm_module
 
     with patch("app.services.secrets.settings") as mock_settings:
         mock_settings.secrets_backend = "gcp_secrets"
         mock_settings.secrets_prefix = ""
         mock_settings.gcp_project_id = "my-project"
 
-        # Patch the import inside _fetch_from_gcp
-        with patch.dict("sys.modules", {"google.cloud.secretmanager": mock_module, "google.cloud": MagicMock(), "google": MagicMock()}):
+        with patch.dict("sys.modules", {
+            "google": MagicMock(cloud=mock_gc),
+            "google.cloud": mock_gc,
+            "google.cloud.secretmanager": mock_sm_module,
+        }):
             result = get_secret("hd_wallet_master_seed")
 
         assert result == "gcp-seed-value"
