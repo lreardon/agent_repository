@@ -1,5 +1,5 @@
 # TODO: Set this to your actual GCP project ID
-project_id  = "CHANGE_ME"
+project_id  = "agent-registry-488317"
 region      = "us-west1"
 environment = "staging"
 

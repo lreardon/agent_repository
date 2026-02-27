@@ -1,4 +1,4 @@
-project_id  = "agent-registry"
+project_id  = "agent-registry-488317"
 region      = "us-west1"
 environment = "production"
 

@@ -35,7 +35,7 @@ resource "google_service_networking_connection" "private_vpc" {
 # Serverless VPC connector (Cloud Run → Cloud SQL / Redis)
 # --------------------------------------------------------------------------
 resource "google_vpc_access_connector" "connector" {
-  name          = "agent-registry-conn"
+  name          = "agent-registry-connector"
   region        = var.region
   ip_cidr_range = "10.8.0.0/28"
   network       = data.google_compute_network.default.name
