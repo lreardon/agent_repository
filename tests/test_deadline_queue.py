@@ -9,9 +9,8 @@ from unittest.mock import patch
 import pytest
 import pytest_asyncio
 import redis.asyncio as aioredis
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.config import settings
 from app.database import Base
 from app.models.agent import Agent
 from app.models.escrow import EscrowAccount
@@ -25,27 +24,26 @@ from app.services.deadline_queue import (
 
 
 @pytest_asyncio.fixture
-async def redis_client() -> aioredis.Redis:
-    client = aioredis.from_url(settings.redis_url)
-    await client.delete(DEADLINE_KEY)
-    yield client
-    await client.delete(DEADLINE_KEY)
-    await client.aclose()
+async def redis_client(_worker_redis) -> aioredis.Redis:
+    await _worker_redis.delete(DEADLINE_KEY)
+    yield _worker_redis
+    await _worker_redis.delete(DEADLINE_KEY)
 
 
 @pytest_asyncio.fixture
-async def test_db():
-    """Standalone test DB session factory for background-service tests."""
-    engine = create_async_engine(settings.test_database_url)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def test_db(_worker_engine):
+    """Session factory backed by the per-worker engine (tables already exist).
 
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    Tests using this fixture do real commits (needed for service-layer mocking),
+    but we truncate tables after each test to avoid cross-test contamination.
+    """
+    factory = async_sessionmaker(_worker_engine, class_=AsyncSession, expire_on_commit=False)
     yield factory
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+    # Clean up data committed during the test
+    async with _worker_engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
 
 
 def _make_agent(**kwargs) -> Agent:
