@@ -120,11 +120,14 @@ class TestSandboxResult:
 # ---------------------------------------------------------------------------
 
 def _docker_available() -> bool:
+    import os
     import shutil
+    if os.environ.get("CI"):
+        return False  # GitHub Actions Docker lacks sandbox permissions
     return shutil.which("docker") is not None
 
 
-docker = pytest.mark.skipif(not _docker_available(), reason="Docker not available")
+docker = pytest.mark.skipif(not _docker_available(), reason="Docker sandbox not available")
 
 
 class TestSandboxEarlyErrors:

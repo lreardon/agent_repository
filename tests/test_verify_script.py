@@ -6,6 +6,7 @@ Requires Docker for sandbox execution.
 
 import base64
 import json
+import os
 import shutil
 
 import pytest
@@ -20,7 +21,7 @@ def _b64(script: str) -> str:
 
 
 _docker = pytest.mark.skipif(
-    not shutil.which("docker"), reason="Docker not available",
+    os.environ.get("CI") or not shutil.which("docker"), reason="Docker sandbox not available",
 )
 
 

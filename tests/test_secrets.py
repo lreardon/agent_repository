@@ -75,42 +75,25 @@ def test_get_treasury_key_convenience():
         assert get_treasury_key() == "0xkey"
 
 
-def test_aws_backend_fetches_single_secret():
-    """Test AWS Secrets Manager integration (mocked)."""
+def test_gcp_backend_fetches_secret():
+    """Test GCP Secret Manager integration (mocked)."""
     import sys
 
-    mock_boto3 = MagicMock()
+    mock_secretmanager = MagicMock()
     mock_client = MagicMock()
-    mock_client.get_secret_value.return_value = {"SecretString": "aws-seed-value"}
-    mock_boto3.client.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.payload.data.decode.return_value = "gcp-seed-value"
+    mock_client.access_secret_version.return_value = mock_response
+    mock_secretmanager.SecretManagerServiceClient.return_value = mock_client
 
     with patch("app.services.secrets.settings") as mock_settings, \
-         patch.dict(sys.modules, {"boto3": mock_boto3}):
-        mock_settings.secrets_backend = "aws_secrets"
+         patch.dict(sys.modules, {"google.cloud.secretmanager": mock_secretmanager, "google.cloud": MagicMock(), "google": MagicMock()}):
+        mock_settings.secrets_backend = "gcp_secrets"
         mock_settings.secrets_prefix = ""
-        mock_settings.aws_region = "us-east-1"
+        mock_settings.gcp_project_id = "my-project"
 
         result = get_secret("hd_wallet_master_seed")
-        assert result == "aws-seed-value"
-        mock_client.get_secret_value.assert_called_once_with(SecretId="hd_wallet_master_seed")
-
-
-def test_aws_backend_with_prefix():
-    import sys
-
-    mock_boto3 = MagicMock()
-    mock_client = MagicMock()
-    mock_client.get_secret_value.return_value = {"SecretString": "prefixed-value"}
-    mock_boto3.client.return_value = mock_client
-
-    with patch("app.services.secrets.settings") as mock_settings, \
-         patch.dict(sys.modules, {"boto3": mock_boto3}):
-        mock_settings.secrets_backend = "aws_secrets"
-        mock_settings.secrets_prefix = "agent-registry/prod"
-        mock_settings.aws_region = "us-east-1"
-
-        result = get_secret("hd_wallet_master_seed")
-        assert result == "prefixed-value"
-        mock_client.get_secret_value.assert_called_once_with(
-            SecretId="agent-registry/prod/hd_wallet_master_seed"
+        assert result == "gcp-seed-value"
+        mock_client.access_secret_version.assert_called_once_with(
+            request={"name": "projects/my-project/secrets/hd_wallet_master_seed/versions/latest"}
         )
