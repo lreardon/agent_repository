@@ -46,6 +46,24 @@ variable "max_instances" {
   type = number
 }
 
+variable "sandbox_gke_cluster" {
+  description = "GKE cluster name for sandbox verification"
+  type        = string
+  default     = ""
+}
+
+variable "sandbox_gke_location" {
+  description = "GKE cluster location (region)"
+  type        = string
+  default     = ""
+}
+
+variable "sandbox_service_account" {
+  description = "Service account email for sandbox runner (impersonation)"
+  type        = string
+  default     = ""
+}
+
 # --------------------------------------------------------------------------
 # Cloud Run service
 # --------------------------------------------------------------------------
@@ -118,6 +136,26 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
+      }
+
+      env {
+        name  = "SANDBOX_GKE_CLUSTER"
+        value = var.sandbox_gke_cluster
+      }
+
+      env {
+        name  = "SANDBOX_GKE_LOCATION"
+        value = var.sandbox_gke_location
+      }
+
+      env {
+        name  = "SANDBOX_NAMESPACE"
+        value = "sandbox"
+      }
+
+      env {
+        name  = "SANDBOX_SERVICE_ACCOUNT"
+        value = var.sandbox_service_account
       }
 
       # --- Secrets mounted as env vars ---

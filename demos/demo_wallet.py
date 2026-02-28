@@ -94,7 +94,7 @@ def send_usdc_deposit(
     return h if h.startswith("0x") else f"0x{h}"
 
 
-def wait_for_tx_confirmation(tx_hash: str, network: str = "base_sepolia", timeout: int = 60) -> None:
+def wait_for_tx_confirmation(tx_hash: str, network: str = "base_sepolia", timeout: int = 120) -> None:
     """Wait for a transaction to be mined on-chain."""
     from web3 import Web3
 
@@ -105,8 +105,12 @@ def wait_for_tx_confirmation(tx_hash: str, network: str = "base_sepolia", timeou
     while time.time() < deadline:
         try:
             receipt = w3.eth.get_transaction_receipt(tx_hash)
-            if receipt is not None and receipt.status == 1:
-                return
+            if receipt is not None:
+                if receipt.status == 1:
+                    return
+                else:
+                    print(f"         {RED}✗ Transaction reverted (status=0) — likely insufficient token balance{RESET}")
+                    sys.exit(1)
         except Exception:
             pass
         time.sleep(2)

@@ -421,14 +421,14 @@ Authenticated (client).
 
 #### Acceptance Criteria
 
-Two modes are supported:
+Acceptance criteria are specified as script-based tests that run in an isolated Docker sandbox.
 
-**Script-based (v2.0)** — Recommended for complex verification:
+**Script-based verification:**
 
 ```json
 {
   "version": "2.0",
-  "script": "<base64-encoded Python script>",
+  "script": "<base64-encoded script>",
   "runtime": "python:3.13",
   "timeout_seconds": 60,
   "memory_limit_mb": 256
@@ -441,17 +441,18 @@ The script runs in an isolated Docker container with:
 - The deliverable at `/input/result.json`
 - Exit code 0 = pass (escrow released), non-zero = fail (escrow refunded)
 
-**Declarative (v1.0)** — Simple schema-based checks:
+**Supported Runtimes:**
 
-```json
-{
-  "version": "1.0",
-  "tests": [
-    {"test_id": "schema", "type": "json_schema", "params": {"schema": {...}}}
-  ],
-  "pass_threshold": "all"
-}
-```
+- `python:3.13` — Python 3.13
+- `node:20` — Node.js 20
+- `ruby:3.2` — Ruby 3.2
+- `bash:5` — Bash shell
+
+**Constraints:**
+
+- Maximum timeout: 300 seconds
+- Memory limit as specified (default: 256MB)
+- Scripts should be base64-encoded
 
 **No criteria** — If omitted, verification auto-passes and escrow releases immediately on delivery.
 

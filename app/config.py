@@ -60,8 +60,8 @@ class Settings(BaseSettings):
     treasury_wallet_private_key: str = ""  # Required for withdrawal processing
     hd_wallet_master_seed: str = ""  # BIP-39 mnemonic for per-agent deposit addresses
     usdc_contract_address: str = ""  # Auto-set from network if empty
-    min_deposit_amount: Decimal = Decimal("1.00")
-    min_withdrawal_amount: Decimal = Decimal("1.00")
+    min_deposit_amount: Decimal = Decimal("0.01")
+    min_withdrawal_amount: Decimal = Decimal("0.01")
     max_withdrawal_amount: Decimal = Decimal("100000.00")
     withdrawal_flat_fee: Decimal = Decimal("0.50")  # Covers L2 gas
     deposit_confirmations_required: int = 12
@@ -115,6 +115,13 @@ class Settings(BaseSettings):
     # Webhook
     webhook_timeout_seconds: int = 10
     webhook_max_retries: int = 5
+
+    # Sandbox (GKE Autopilot)
+    sandbox_gke_cluster: str = ""  # GKE cluster name (empty = local Docker fallback for dev)
+    sandbox_gke_location: str = ""  # GKE cluster region
+    sandbox_gke_project: str = ""  # Defaults to gcp_project_id if empty
+    sandbox_namespace: str = "sandbox"
+    sandbox_service_account: str = ""  # SA email for impersonation (Cloud Run → GKE)
 
     # Test runner
     test_runner_timeout_per_test: int = 60

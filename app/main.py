@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet
@@ -152,6 +153,12 @@ app.include_router(fees.router)
 app.include_router(jobs.router)
 app.include_router(reviews.router)
 app.include_router(wallet.router)
+
+# Static files - serve documentation
+from pathlib import Path
+static_dir = Path(__file__).parent.parent / "web"
+if static_dir.exists():
+    app.mount("/docs-site", StaticFiles(directory=str(static_dir), html=True), name="docs-site")
 
 
 @app.get("/health")

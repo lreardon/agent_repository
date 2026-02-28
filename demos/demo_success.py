@@ -25,6 +25,7 @@ Run:
 import base64
 import hashlib
 import json
+import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -36,7 +37,15 @@ from nacl.signing import SigningKey
 
 from demo_wallet import deposit_usdc
 
-BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
+BASE_URL = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("AGENT_REGISTRY_URL", "http://localhost:8080")
+
+# ─── Demo Amounts (override via env for staging/testnet budgets) ───
+
+DEPOSIT_AMOUNT = os.environ.get("DEMO_DEPOSIT_AMOUNT", "5.00")
+LISTING_PRICE = os.environ.get("DEMO_LISTING_PRICE", "0.05")
+MAX_BUDGET = os.environ.get("DEMO_MAX_BUDGET", "2.50")
+COUNTER_PRICE_1 = os.environ.get("DEMO_COUNTER_PRICE_1", "3.00")
+COUNTER_PRICE_2 = os.environ.get("DEMO_COUNTER_PRICE_2", "2.80")
 
 # ─── Colors ───
 
@@ -264,7 +273,7 @@ def main() -> None:
     print(f"\n{DIM}Checking API at {BASE_URL}...{RESET}")
 
     try:
-        r = httpx.get(f"{BASE_URL}/health", timeout=3)
+        r = httpx.get(f"{BASE_URL}/health", timeout=30)
         if r.status_code != 200:
             fail(f"API returned {r.status_code}")
     except httpx.ConnectError:
@@ -313,23 +322,30 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"My deposit address: {addr_data['address']}")
     agent_says("Bob", YELLOW, f"Network: {addr_data['network']} | USDC: {addr_data['usdc_contract'][:10]}...")
 
-    data = deposit_usdc(bob, bob.agent_id, "5.00", addr_data["address"], addr_data["network"])
+    data = deposit_usdc(bob, bob.agent_id, DEPOSIT_AMOUNT, addr_data["address"], addr_data["network"])
     agent_says("Bob", YELLOW, f"Balance: ${data['balance']}")
 
-    step(4, "Alice creates a service listing")
+    step(4, "Alice funds her account (needed for storage fees on delivery)")
+    alice_addr = expect(alice.get(f"/agents/{alice.agent_id}/wallet/deposit-address", signed=True), 200, "Alice deposit address")
+    agent_says("Alice", BLUE, f"Deposit address: {alice_addr['address']}")
+    alice_deposit = os.environ.get("DEMO_ALICE_DEPOSIT", "1.00")
+    data = deposit_usdc(alice, alice.agent_id, alice_deposit, alice_addr["address"], alice_addr["network"])
+    agent_says("Alice", BLUE, f"Balance: ${data['balance']}")
+
+    step(6, "Alice creates a service listing")
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
         "skill_id": "pdf-extraction",
         "description": "Extract structured JSON from PDF documents. "
                        "Supports tables, forms, and handwritten text via OCR.",
         "price_model": "per_unit",
-        "base_price": "0.05",
+        "base_price": LISTING_PRICE,
         "sla": {"max_latency_seconds": 3600, "uptime_pct": 99.5},
     }), 201, "Alice listing")
     listing_id = data["listing_id"]
     agent_says("Alice", BLUE, f"Listed: {data['skill_id']} @ ${data['base_price']}/{data['price_model']}")
     show_json(data, ["listing_id", "skill_id", "price_model", "base_price", "sla"])
 
-    step(5, "Bob discovers agents with PDF capabilities")
+    step(6, "Bob discovers agents with PDF capabilities")
     results = expect(bob.get("/discover?skill_id=pdf"), 200, "Discovery")
     agent_says("Bob", YELLOW, f"Found {len(results)} matching agent(s):")
     for r in results:
@@ -343,7 +359,7 @@ def main() -> None:
     # Build the verification script as base64
     script_b64 = base64.b64encode(VERIFY_SCRIPT.encode()).decode()
 
-    step(6, "Bob proposes a job with script-based acceptance criteria")
+    step(7, "Bob proposes a job with script-based acceptance criteria")
     print(f"         {DIM}Bob writes a verification script that will run in a")
     print(f"         sandboxed Docker container against Alice's output.{RESET}")
     code_block("Verification Script (runs in neutral sandbox)", VERIFY_SCRIPT[:600] + "\n  ...")
@@ -352,7 +368,7 @@ def main() -> None:
     data = expect(bob.post("/jobs", {
         "seller_agent_id": alice.agent_id,
         "listing_id": listing_id,
-        "max_budget": "2.50",
+        "max_budget": MAX_BUDGET,
         "requirements": {
             "input_format": "pdf",
             "volume_pages": 50,
@@ -373,18 +389,18 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"Job proposed: {job_id[:8]}... | Budget: $2.50")
     agent_says("Bob", YELLOW, "Acceptance: script-based verification (6 checks)")
 
-    step(7, "Alice reviews terms and counters: $30, faster delivery")
+    step(8, "Alice reviews terms and counters: $30, faster delivery")
     data = expect(alice.post(f"/jobs/{job_id}/counter", {
-        "proposed_price": "3.00",
+        "proposed_price": COUNTER_PRICE_1,
         "counter_terms": {"delivery_deadline": "2026-02-27T00:00:00Z"},
         "message": "50 pages with OCR is heavy lifting. $30 flat, but I'll deliver a day early.",
     }), 200, "Alice counter")
     agent_says("Alice", BLUE, f"Counter: $3.00 — \"50 pages is heavy, but I'll deliver early.\"")
     print(f"           Status: {data['status']} | Round: {data['current_round']}/{data['max_rounds']}")
 
-    step(8, "Bob counters back: $28, keep the early delivery")
+    step(9, "Bob counters back: $28, keep the early delivery")
     data = expect(bob.post(f"/jobs/{job_id}/counter", {
-        "proposed_price": "2.80",
+        "proposed_price": COUNTER_PRICE_2,
         "counter_terms": {"delivery_deadline": "2026-02-27T00:00:00Z"},
         "accepted_terms": ["early_delivery"],
         "message": "Love the early delivery. Meet me at $2.80?",
@@ -392,8 +408,18 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"Counter: $2.80 — \"Meet me at $2.80?\"")
     print(f"           Status: {data['status']} | Round: {data['current_round']}/{data['max_rounds']}")
 
-    step(9, "Alice accepts Bob's terms")
-    data = expect(alice.post(f"/jobs/{job_id}/accept"), 200, "Alice accept")
+    step(10, "Alice accepts Bob's terms")
+    # Alice must prove she reviewed the verification script by providing its hash
+    acceptance_criteria = {
+        "version": "2.0",
+        "script": script_b64,
+        "runtime": "python:3.13",
+        "timeout_seconds": 60,
+        "memory_limit_mb": 256,
+    }
+    criteria_canonical = json.dumps(acceptance_criteria, sort_keys=True, separators=(",", ":"))
+    criteria_hash = hashlib.sha256(criteria_canonical.encode()).hexdigest()
+    data = expect(alice.post(f"/jobs/{job_id}/accept", {"acceptance_criteria_hash": criteria_hash}), 200, "Alice accept")
     agent_says("Alice", BLUE, f"Deal! ${data['agreed_price']} with early delivery.")
     print(f"           Status: {GREEN}{data['status']}{RESET} | Agreed: ${data['agreed_price']}")
     agreed_price = Decimal(str(data["agreed_price"]))
@@ -402,7 +428,7 @@ def main() -> None:
     banner("Act 4: Escrow — Platform Secures the Funds")
     # ═══════════════════════════════════════════════════════════════
 
-    step(10, "Bob funds escrow — credits locked by the platform")
+    step(11, "Bob funds escrow — credits locked by the platform")
     escrow_data = expect(bob.post(f"/jobs/{job_id}/fund"), 200, "Fund escrow")
     platform_says(f"Escrow created: ${escrow_data['amount']} locked")
     show_json(escrow_data, ["escrow_id", "amount", "status"])
@@ -415,12 +441,12 @@ def main() -> None:
     banner("Act 5: Execution — Alice Does the Work")
     # ═══════════════════════════════════════════════════════════════
 
-    step(11, "Alice starts work on the job")
+    step(12, "Alice starts work on the job")
     data = expect(alice.post(f"/jobs/{job_id}/start"), 200, "Start work")
     agent_says("Alice", BLUE, "Starting PDF extraction... ⚙️")
     print(f"           Status: {data['status']}")
 
-    step(12, "Alice delivers 45 extracted records")
+    step(13, "Alice delivers 45 extracted records")
     print(f"         {DIM}(In production, Alice's agent runs real PDF extraction.")
     print(f"          Here we simulate a high-quality deliverable.){RESET}")
     records = [
@@ -458,7 +484,7 @@ def main() -> None:
          The code is the contract. The sandbox is the judge.{RESET}
 """)
 
-    step(13, "Platform runs Bob's verification script in sandbox")
+    step(14, "Platform runs Bob's verification script in sandbox")
     t0 = time.time()
     data = expect(bob.post(f"/jobs/{job_id}/verify"), 200, "Verify")
     elapsed = time.time() - t0
@@ -507,17 +533,17 @@ def main() -> None:
     banner("Act 7: Settlement — Follow the Money")
     # ═══════════════════════════════════════════════════════════════
 
-    step(14, "Final balances")
+    step(15, "Final balances")
     alice_bal = expect(alice.get(f"/agents/{alice.agent_id}/balance", signed=True), 200, "Alice balance")
     bob_bal = expect(bob.get(f"/agents/{bob.agent_id}/balance", signed=True), 200, "Bob balance")
 
     alice_earned = Decimal(str(alice_bal["balance"]))
     bob_remaining = Decimal(str(bob_bal["balance"]))
-    bob_spent = Decimal("5.00") - bob_remaining
+    bob_spent = Decimal(DEPOSIT_AMOUNT) - bob_remaining
     platform_fee = bob_spent - alice_earned
 
     print(f"           {'─' * 42}")
-    print(f"           Bob deposited:        $5.00")
+    print(f"           Bob deposited:        ${DEPOSIT_AMOUNT}")
     print(f"           Agreed price:         ${agreed_price}")
     print(f"           Platform fee (2.5%):  ${platform_fee}")
     print(f"           {'─' * 42}")
@@ -530,11 +556,11 @@ def main() -> None:
     banner("Act 8: Off-Ramp — Alice Withdraws Her Earnings")
     # ═══════════════════════════════════════════════════════════════
 
-    step(15, "Alice checks her wallet balance")
+    step(16, "Alice checks her wallet balance")
     wallet_bal = expect(alice.get(f"/agents/{alice.agent_id}/wallet/balance", signed=True), 200, "Alice wallet")
     agent_says("Alice", BLUE, f"Balance: ${wallet_bal['balance']} | Available: ${wallet_bal['available_balance']}")
 
-    step(16, "Alice withdraws her earnings as USDC")
+    step(17, "Alice withdraws her earnings as USDC")
     withdraw_amount = alice_earned
     data = expect(alice.post(f"/agents/{alice.agent_id}/wallet/withdraw", {
         "amount": str(withdraw_amount),
@@ -546,7 +572,7 @@ def main() -> None:
     platform_says(f"Withdrawal {data['status']} → USDC sent to {data['destination_address'][:10]}...")
     show_json(data, ["withdrawal_id", "amount", "fee", "net_payout", "status"])
 
-    step(17, "Alice's transaction history")
+    step(18, "Alice's transaction history")
     txns = expect(alice.get(f"/agents/{alice.agent_id}/wallet/transactions", signed=True), 200, "Transactions")
     agent_says("Alice", BLUE, f"Withdrawals: {len(txns['withdrawals'])} | Deposits: {len(txns['deposits'])}")
 
@@ -554,7 +580,7 @@ def main() -> None:
     banner("Act 9: Reputation — Agents Review Each Other")
     # ═══════════════════════════════════════════════════════════════
 
-    step(18, "Bob reviews Alice (client → seller)")
+    step(19, "Bob reviews Alice (client → seller)")
     data = expect(bob.post(f"/jobs/{job_id}/reviews", {
         "rating": 5,
         "tags": ["fast", "reliable", "accurate", "high-yield"],
@@ -564,7 +590,7 @@ def main() -> None:
     agent_says("Bob", YELLOW, f"{'⭐' * data['rating']} — \"{data.get('comment', '')[:70]}...\"")
     show_json(data, ["rating", "tags", "role"])
 
-    step(19, "Alice reviews Bob (seller → client)")
+    step(20, "Alice reviews Bob (seller → client)")
     data = expect(alice.post(f"/jobs/{job_id}/reviews", {
         "rating": 4,
         "tags": ["clear-spec", "good-payer", "fair-criteria"],
@@ -573,7 +599,7 @@ def main() -> None:
     }), 201, "Alice review")
     agent_says("Alice", BLUE, f"{'⭐' * data['rating']} — \"{data.get('comment', '')[:70]}...\"")
 
-    step(20, "Alice's reputation on the platform")
+    step(21, "Alice's reputation on the platform")
     rep = expect(bob.get(f"/agents/{alice.agent_id}/reputation"), 200, "Reputation")
     print(f"           Seller rating: {rep['reputation_seller_display']}")
     print(f"           Total reviews: {rep['total_reviews_as_seller']}")

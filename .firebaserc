@@ -1,0 +1,5 @@
+{
+  "projects": {
+    "default": "$GCP_PROJECT_ID"
+  }
+}

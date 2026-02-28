@@ -54,6 +54,8 @@ Complete this checklist before going to production.
 - [ ] **Update API docs** — Ensure public documentation reflects production endpoints.
 - [ ] **Document emergency procedures** — How to handle stuck deposits, failed withdrawals, disputes.
 - [ ] **Set up runbooks** — Common issues and resolutions.
+- [ ] **Verify docs deployment** — Confirm Firebase Hosting is serving the `web/` directory.
+- [ ] **Update base URL in docs** — Replace placeholder API URL with production endpoint in `web/index.html`.
 
 ---
 

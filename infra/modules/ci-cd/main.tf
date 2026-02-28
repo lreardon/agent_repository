@@ -50,6 +50,7 @@ locals {
     "roles/artifactregistry.writer",
     "roles/cloudbuild.builds.editor",
     "roles/iam.serviceAccountUser",
+    "roles/firebasehosting.admin",
   ]
 }
 

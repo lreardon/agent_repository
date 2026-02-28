@@ -22,13 +22,21 @@ resource "google_compute_global_address" "private_ip_range" {
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 16
-  network       = data.google_compute_network.default.id
+  network       = data.google_compute_network.default.self_link
+
+  lifecycle {
+    ignore_changes = [network]
+  }
 }
 
 resource "google_service_networking_connection" "private_vpc" {
-  network                 = data.google_compute_network.default.id
+  network                 = data.google_compute_network.default.self_link
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
+
+  lifecycle {
+    ignore_changes = [network]
+  }
 }
 
 # --------------------------------------------------------------------------

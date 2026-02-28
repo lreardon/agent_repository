@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.25"
+    }
   }
 
   # After first apply, uncomment and run `terraform init` to migrate state to GCS:
@@ -18,6 +22,17 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
+}
+
+# Kubernetes provider — configured after GKE cluster exists.
+# On first apply (before GKE), this will use dummy values;
+# run `terraform apply` again after the cluster is created.
+data "google_client_config" "default" {}
+
+provider "kubernetes" {
+  host                   = "https://${try(module.gke.cluster_endpoint, "127.0.0.1")}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = try(base64decode(module.gke.cluster_ca_certificate), "")
 }
 
 # --------------------------------------------------------------------------
@@ -35,8 +50,11 @@ resource "google_project_service" "apis" {
     "vpcaccess.googleapis.com",
     "cloudtasks.googleapis.com",
     "compute.googleapis.com",
+    "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "firebasehosting.googleapis.com",
+    "firebase.googleapis.com",
   ])
 
   project            = var.project_id
@@ -143,6 +161,20 @@ module "ci_cd" {
 }
 
 # --------------------------------------------------------------------------
+# GKE Autopilot (sandbox for verification scripts)
+# --------------------------------------------------------------------------
+module "gke" {
+  source = "./modules/gke"
+
+  project_id             = var.project_id
+  region                 = var.region
+  environment            = var.environment
+  network                = "default"
+  network_id             = module.networking.vpc_id
+  master_authorized_cidr = "10.8.0.0/28"
+}
+
+# --------------------------------------------------------------------------
 # Cloud Run
 # --------------------------------------------------------------------------
 module "cloud_run" {
@@ -158,13 +190,32 @@ module "cloud_run" {
   signing_key_secret_id = module.secrets.signing_key_secret_id
   redis_host            = module.redis.host
   redis_port            = module.redis.port
-  min_instances         = var.cloud_run_min_instances
-  max_instances         = var.cloud_run_max_instances
+  min_instances            = var.cloud_run_min_instances
+  max_instances            = var.cloud_run_max_instances
+  sandbox_gke_cluster      = module.gke.cluster_name
+  sandbox_gke_location     = var.region
+  sandbox_service_account  = module.gke.sandbox_service_account_email
 
   depends_on = [
     module.database,
     module.redis,
     module.secrets,
+    module.gke,
     google_artifact_registry_repository.api,
   ]
 }
+
+# --------------------------------------------------------------------------
+# Firebase Hosting (Documentation Site)
+# TODO: Re-enable once firebase provider is available.
+#       The hashicorp/firebase provider doesn't exist yet;
+#       firebase_hosting_site requires the google-beta provider.
+# --------------------------------------------------------------------------
+# module "firebase_hosting" {
+#   source = "./modules/firebase-hosting"
+#
+#   project_id  = var.project_id
+#   environment = var.environment
+#
+#   depends_on = [google_project_service.apis]
+# }

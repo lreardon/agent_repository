@@ -33,6 +33,21 @@ output "webhook_queue_name" {
   value       = google_cloud_tasks_queue.webhook_delivery.name
 }
 
+output "gke_cluster_name" {
+  description = "GKE Autopilot cluster name for sandbox verification"
+  value       = module.gke.cluster_name
+}
+
+output "gke_cluster_endpoint" {
+  description = "GKE cluster API endpoint"
+  value       = module.gke.cluster_endpoint
+}
+
+output "sandbox_service_account" {
+  description = "Sandbox runner service account email"
+  value       = module.gke.sandbox_service_account_email
+}
+
 output "wif_provider" {
   description = "Workload Identity Federation provider (for GitHub Actions auth action)"
   value       = module.ci_cd.workload_identity_provider
@@ -42,3 +57,8 @@ output "ci_service_account_email" {
   description = "CI/CD service account email (for GitHub Actions auth action)"
   value       = module.ci_cd.service_account_email
 }
+
+# output "docs_url" {
+#   description = "Public URL of the documentation site (Firebase Hosting)"
+#   value       = module.firebase_hosting.default_url
+# }

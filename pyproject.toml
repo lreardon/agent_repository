@@ -20,6 +20,10 @@ dependencies = [
     "jsonschema>=4.21.0",
     "web3>=7.0.0",
     "eth-account>=0.13.0",
+    "google-cloud-secret-manager>=2.18.0",
+    "kubernetes>=29.0.0",
+    "google-auth>=2.27.0",
+    "google-cloud-container>=2.40.0",
 ]
 
 [project.optional-dependencies]
