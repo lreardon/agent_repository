@@ -58,7 +58,12 @@ output "ci_service_account_email" {
   value       = module.ci_cd.service_account_email
 }
 
-# output "docs_url" {
-#   description = "Public URL of the documentation site (Firebase Hosting)"
-#   value       = module.firebase_hosting.default_url
-# }
+output "docs_site_id" {
+  description = "Firebase Hosting site ID for the documentation site"
+  value       = google_firebase_hosting_site.docs.site_id
+}
+
+output "docs_url" {
+  description = "Public URL of the documentation site (Firebase Hosting)"
+  value       = "https://${google_firebase_hosting_site.docs.site_id}.web.app"
+}

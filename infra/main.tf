@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 5.0"
+    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.25"
@@ -20,6 +24,11 @@ terraform {
 }
 
 provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "google-beta" {
   project = var.project_id
   region  = var.region
 }
@@ -53,6 +62,7 @@ resource "google_project_service" "apis" {
     "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "firebasehosting.googleapis.com",
   ])
 
   project            = var.project_id
@@ -203,4 +213,14 @@ module "cloud_run" {
   ]
 }
 
+# --------------------------------------------------------------------------
+# Firebase Hosting (Documentation Site)
+# --------------------------------------------------------------------------
+resource "google_firebase_hosting_site" "docs" {
+  provider = google-beta
+  project  = var.project_id
+  site_id  = "${var.project_id}-${var.environment}"
+
+  depends_on = [google_project_service.apis]
+}
 
