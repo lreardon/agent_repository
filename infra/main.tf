@@ -62,6 +62,7 @@ resource "google_project_service" "apis" {
     "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "firebase.googleapis.com",
     "firebasehosting.googleapis.com",
   ])
 
