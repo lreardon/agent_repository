@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "$PROJECT_ID",
     "public": "web",
     "ignore": [
       "firebase.json",
