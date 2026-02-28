@@ -1,5 +1,5 @@
 {
   "projects": {
-    "default": "$GCP_PROJECT_ID"
+    "default": "$PROJECT_ID"
   }
 }

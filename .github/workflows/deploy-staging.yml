@@ -118,7 +118,7 @@ jobs:
       - name: Deploy to Firebase Hosting
         run: |
           # Substitute PROJECT_ID in .firebaserc
-          sed -i "s/\$GCP_PROJECT_ID/${PROJECT_ID}/g" .firebaserc
+          sed -i "s/\$PROJECT_ID/${PROJECT_ID}/g" .firebaserc
 
           # Deploy only the hosting site
           firebase deploy --only hosting --project="${PROJECT_ID}"
