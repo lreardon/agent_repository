@@ -53,8 +53,6 @@ resource "google_project_service" "apis" {
     "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
-    "firebasehosting.googleapis.com",
-    "firebase.googleapis.com",
   ])
 
   project            = var.project_id
@@ -205,17 +203,4 @@ module "cloud_run" {
   ]
 }
 
-# --------------------------------------------------------------------------
-# Firebase Hosting (Documentation Site)
-# TODO: Re-enable once firebase provider is available.
-#       The hashicorp/firebase provider doesn't exist yet;
-#       firebase_hosting_site requires the google-beta provider.
-# --------------------------------------------------------------------------
-# module "firebase_hosting" {
-#   source = "./modules/firebase-hosting"
-#
-#   project_id  = var.project_id
-#   environment = var.environment
-#
-#   depends_on = [google_project_service.apis]
-# }
+
