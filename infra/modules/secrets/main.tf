@@ -11,6 +11,11 @@ variable "db_password" {
   sensitive = true
 }
 
+variable "cloud_run_service_account" {
+  description = "Email of the dedicated Cloud Run service account"
+  type        = string
+}
+
 # --------------------------------------------------------------------------
 # Database password
 # --------------------------------------------------------------------------
@@ -49,26 +54,18 @@ resource "google_secret_manager_secret_version" "signing_key" {
 }
 
 # --------------------------------------------------------------------------
-# IAM — grant Cloud Run service account access to secrets
+# IAM — grant dedicated Cloud Run service account access to secrets
 # --------------------------------------------------------------------------
-data "google_project" "current" {
-  project_id = var.project_id
-}
-
-locals {
-  compute_sa = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
 resource "google_secret_manager_secret_iam_member" "db_password_access" {
   secret_id = google_secret_manager_secret.db_password.id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.compute_sa}"
+  member    = "serviceAccount:${var.cloud_run_service_account}"
 }
 
 resource "google_secret_manager_secret_iam_member" "signing_key_access" {
   secret_id = google_secret_manager_secret.signing_key.id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.compute_sa}"
+  member    = "serviceAccount:${var.cloud_run_service_account}"
 }
 
 # --------------------------------------------------------------------------

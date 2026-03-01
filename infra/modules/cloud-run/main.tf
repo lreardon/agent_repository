@@ -38,6 +38,21 @@ variable "redis_port" {
   type = number
 }
 
+variable "redis_auth_string" {
+  type      = string
+  sensitive = true
+}
+
+variable "service_account_email" {
+  description = "Dedicated service account email for the Cloud Run service"
+  type        = string
+}
+
+variable "base_url" {
+  description = "Public base URL for the API"
+  type        = string
+}
+
 variable "min_instances" {
   type = number
 }
@@ -72,6 +87,8 @@ resource "google_cloud_run_v2_service" "api" {
   location = var.region
 
   template {
+    service_account = var.service_account_email
+
     scaling {
       min_instance_count = var.min_instances
       max_instance_count = var.max_instances
@@ -104,7 +121,12 @@ resource "google_cloud_run_v2_service" "api" {
 
       env {
         name  = "REDIS_URL"
-        value = "redis://${var.redis_host}:${var.redis_port}/0"
+        value = "redis://:${var.redis_auth_string}@${var.redis_host}:${var.redis_port}/0"
+      }
+
+      env {
+        name  = "BASE_URL"
+        value = var.base_url
       }
 
       # Components for DATABASE_URL (assembled by docker-entrypoint.sh)

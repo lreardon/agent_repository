@@ -59,7 +59,7 @@ resource "google_sql_database_instance" "main" {
     }
   }
 
-  deletion_protection = var.environment == "production"
+  deletion_protection = true
 }
 
 # --------------------------------------------------------------------------

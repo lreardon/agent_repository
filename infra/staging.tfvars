@@ -14,3 +14,6 @@ redis_memory_size_gb = 1
 cloud_run_image         = "us-docker.pkg.dev/cloudrun/container/hello"
 cloud_run_min_instances = 0
 cloud_run_max_instances = 2
+
+# API base URL
+base_url = "https://api.staging.arcoa.ai"

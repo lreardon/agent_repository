@@ -33,15 +33,19 @@ provider "google-beta" {
   region  = var.region
 }
 
-# Kubernetes provider — configured after GKE cluster exists.
-# On first apply (before GKE), this will use dummy values;
-# run `terraform apply` again after the cluster is created.
+# Kubernetes provider — uses Connect Gateway to reach the private GKE cluster.
+# This avoids needing direct IP access to the master (works from any network).
+# Requires: gkehub.googleapis.com + connectgateway.googleapis.com APIs enabled,
+# cluster registered as a Fleet member, and roles/gkehub.gatewayEditor on the caller.
 data "google_client_config" "default" {}
 
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 provider "kubernetes" {
-  host                   = "https://${try(module.gke.cluster_endpoint, "127.0.0.1")}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = try(base64decode(module.gke.cluster_ca_certificate), "")
+  host  = "https://${var.region}-connectgateway.googleapis.com/v1/projects/${data.google_project.current.number}/locations/${var.region}/gkeMemberships/${try(module.gke.cluster_name, "placeholder")}"
+  token = data.google_client_config.default.access_token
 }
 
 # --------------------------------------------------------------------------
@@ -64,6 +68,8 @@ resource "google_project_service" "apis" {
     "iamcredentials.googleapis.com",
     "firebase.googleapis.com",
     "firebasehosting.googleapis.com",
+    "gkehub.googleapis.com",
+    "connectgateway.googleapis.com",
   ])
 
   project            = var.project_id
@@ -120,9 +126,29 @@ module "redis" {
 module "secrets" {
   source = "./modules/secrets"
 
-  project_id  = var.project_id
-  environment = var.environment
-  db_password = module.database.user_password
+  project_id                = var.project_id
+  environment               = var.environment
+  db_password               = module.database.user_password
+  cloud_run_service_account = google_service_account.cloud_run_api.email
+}
+
+# --------------------------------------------------------------------------
+# Dedicated Cloud Run service account (least-privilege)
+# --------------------------------------------------------------------------
+resource "google_service_account" "cloud_run_api" {
+  account_id   = "agent-registry-api-${var.environment}"
+  display_name = "Agent Registry API (${var.environment})"
+  description  = "Dedicated service account for the Cloud Run API service"
+  project      = var.project_id
+
+  depends_on = [google_project_service.apis]
+}
+
+# Cloud SQL client — required for Cloud SQL Auth Proxy sidecar
+resource "google_project_iam_member" "api_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.cloud_run_api.email}"
 }
 
 # --------------------------------------------------------------------------
@@ -175,12 +201,33 @@ module "ci_cd" {
 module "gke" {
   source = "./modules/gke"
 
-  project_id             = var.project_id
-  region                 = var.region
-  environment            = var.environment
-  network                = "default"
-  network_id             = module.networking.vpc_id
-  master_authorized_cidr = "10.8.0.0/28"
+  project_id                = var.project_id
+  region                    = var.region
+  environment               = var.environment
+  network                   = "default"
+  network_id                = module.networking.vpc_id
+  master_authorized_cidr    = "10.8.0.0/28"
+  cloud_run_service_account = google_service_account.cloud_run_api.email
+}
+
+# --------------------------------------------------------------------------
+# Fleet membership (Connect Gateway access to private GKE cluster)
+# --------------------------------------------------------------------------
+resource "google_gke_hub_membership" "sandbox" {
+  membership_id = module.gke.cluster_name
+  location      = var.region
+
+  endpoint {
+    gke_cluster {
+      resource_link = "//container.googleapis.com/projects/${var.project_id}/locations/${var.region}/clusters/${module.gke.cluster_name}"
+    }
+  }
+
+  authority {
+    issuer = "https://container.googleapis.com/v1/projects/${var.project_id}/locations/${var.region}/clusters/${module.gke.cluster_name}"
+  }
+
+  depends_on = [module.gke, google_project_service.apis]
 }
 
 # --------------------------------------------------------------------------
@@ -193,12 +240,15 @@ module "cloud_run" {
   region                = var.region
   environment           = var.environment
   image                 = var.cloud_run_image
+  service_account_email = google_service_account.cloud_run_api.email
   vpc_connector_id      = module.networking.vpc_connector_id
   cloud_sql_connection  = module.database.connection_name
   db_password_secret_id = module.secrets.db_password_secret_id
   signing_key_secret_id = module.secrets.signing_key_secret_id
   redis_host            = module.redis.host
   redis_port            = module.redis.port
+  redis_auth_string     = module.redis.auth_string
+  base_url              = var.base_url
   min_instances            = var.cloud_run_min_instances
   max_instances            = var.cloud_run_max_instances
   sandbox_gke_cluster      = module.gke.cluster_name

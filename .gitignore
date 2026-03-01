@@ -42,3 +42,4 @@ memory/
 .terraform/
 .terraform.lock.hcl
 build/
+.envrc.hash

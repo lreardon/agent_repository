@@ -25,9 +25,10 @@ resource "google_redis_instance" "main" {
   name               = "agent-registry-${var.environment}"
   region             = var.region
   memory_size_gb     = var.memory_size_gb
-  tier               = "BASIC"
+  tier               = "STANDARD_HA"
   redis_version      = "REDIS_7_2"
   authorized_network = var.authorized_network
+  auth_enabled       = true
 
   display_name = "Agent Registry Redis (${var.environment})"
 }
@@ -41,4 +42,9 @@ output "host" {
 
 output "port" {
   value = google_redis_instance.main.port
+}
+
+output "auth_string" {
+  value     = google_redis_instance.main.auth_string
+  sensitive = true
 }

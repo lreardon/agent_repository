@@ -62,3 +62,8 @@ variable "cloud_run_max_instances" {
   type        = number
   default     = 2
 }
+
+variable "base_url" {
+  description = "Public base URL for the API (used for email verification links, webhooks, etc.)"
+  type        = string
+}

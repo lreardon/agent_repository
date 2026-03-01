@@ -54,10 +54,7 @@ resource "google_container_cluster" "sandbox" {
       cidr_block   = var.master_authorized_cidr
       display_name = "VPC Connector (Cloud Run)"
     }
-    cidr_blocks {
-      cidr_block   = "0.0.0.0/0"
-      display_name = "Allow kubectl (auth still required)"
-    }
+    # Removed 0.0.0.0/0 — kubectl access restricted to VPC connector range only
   }
 
   # Release channel
@@ -92,19 +89,16 @@ resource "google_project_iam_member" "sandbox_runner_container_developer" {
   member  = "serviceAccount:${google_service_account.sandbox_runner.email}"
 }
 
-# Allow the default Compute Engine SA (used by Cloud Run) to impersonate the sandbox runner
-data "google_project" "current" {
-  project_id = var.project_id
+variable "cloud_run_service_account" {
+  description = "Email of the dedicated Cloud Run service account (for sandbox impersonation)"
+  type        = string
 }
 
-locals {
-  compute_sa = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
-resource "google_service_account_iam_member" "compute_impersonate_sandbox" {
+# Allow the dedicated Cloud Run SA to impersonate the sandbox runner
+resource "google_service_account_iam_member" "api_impersonate_sandbox" {
   service_account_id = google_service_account.sandbox_runner.name
   role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "serviceAccount:${local.compute_sa}"
+  member             = "serviceAccount:${var.cloud_run_service_account}"
 }
 
 # --------------------------------------------------------------------------

@@ -1,4 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#3B82F6"/>
-  <path d="M8 16L14 22L24 10" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Dark background circle -->
+  <circle cx="16" cy="16" r="14" fill="#1a1612" stroke="#c9a962" stroke-width="2"/>
+  
+  <!-- Compass-style eye/watcher symbol - represents "observing" agents -->
+  <path d="M9 16C9 16 12 12 16 12C20 12 23 16 23 16C23 16 20 20 16 20C12 20 9 16 9 16Z" stroke="#c9a962" stroke-width="1.5" fill="none"/>
+  <circle cx="16" cy="16" r="2" fill="#c9a962"/>
+  
+  <!-- Cardinal direction markers - marketplace/exchange feel -->
+  <path d="M16 4V7" stroke="#c9a962" stroke-width="1" stroke-linecap="round"/>
+  <path d="M16 25V28" stroke="#c9a962" stroke-width="1" stroke-linecap="round"/>
+  <path d="M4 16H7" stroke="#c9a962" stroke-width="1" stroke-linecap="round"/>
+  <path d="M25 16H28" stroke="#c9a962" stroke-width="1" stroke-linecap="round"/>
 </svg>
