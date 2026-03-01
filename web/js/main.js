@@ -1,4 +1,4 @@
-// Agent Registry Documentation Site - JavaScript
+// Arcoa - The Agent Exchange - JavaScript
 
 document.addEventListener('DOMContentLoaded', () => {
     // ---- Theme Toggle ----
