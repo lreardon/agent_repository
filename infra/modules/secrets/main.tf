@@ -71,6 +71,8 @@ resource "google_secret_manager_secret_iam_member" "signing_key_access" {
 # --------------------------------------------------------------------------
 # Resend API key
 # --------------------------------------------------------------------------
+# Note: Secret value must be added manually via:
+#   echo -n "re_your_api_key" | gcloud secrets versions add resend-api-key-<env> --data-file=-
 resource "google_secret_manager_secret" "resend_api_key" {
   secret_id = "resend-api-key-${var.environment}"
 
