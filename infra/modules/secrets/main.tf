@@ -69,18 +69,18 @@ resource "google_secret_manager_secret_iam_member" "signing_key_access" {
 }
 
 # --------------------------------------------------------------------------
-# SendGrid API key
+# Resend API key
 # --------------------------------------------------------------------------
-resource "google_secret_manager_secret" "sendgrid_api_key" {
-  secret_id = "sendgrid-api-key-${var.environment}"
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "resend-api-key-${var.environment}"
 
   replication {
     auto {}
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "sendgrid_api_key_access" {
-  secret_id = google_secret_manager_secret.sendgrid_api_key.id
+resource "google_secret_manager_secret_iam_member" "resend_api_key_access" {
+  secret_id = google_secret_manager_secret.resend_api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${var.cloud_run_service_account}"
 }
@@ -96,6 +96,6 @@ output "signing_key_secret_id" {
   value = google_secret_manager_secret.signing_key.secret_id
 }
 
-output "sendgrid_api_key_secret_id" {
-  value = google_secret_manager_secret.sendgrid_api_key.secret_id
+output "resend_api_key_secret_id" {
+  value = google_secret_manager_secret.resend_api_key.secret_id
 }

@@ -1,11 +1,13 @@
 """Email sending service.
 
-Supports three backends:
-- SendGrid via REST API (production / staging)
+Supports four backends:
+- Resend via REST API (production / staging) — cheap, simple
+- SendGrid via REST API (alternative production)
 - SMTP via aiosmtplib (alternative production)
 - Log-only (development / testing) — logs the email instead of sending
 
-Set EMAIL_BACKEND=sendgrid and SENDGRID_API_KEY for production.
+Set EMAIL_BACKEND=resend and RESEND_API_KEY for production.
+Set EMAIL_BACKEND=sendgrid and SENDGRID_API_KEY for SendGrid.
 Set EMAIL_BACKEND=smtp and configure SMTP_* settings for SMTP.
 Default is EMAIL_BACKEND=log which just logs the verification link.
 """
@@ -27,6 +29,43 @@ class LogEmailSender:
 
     async def send(self, to: str, subject: str, body: str) -> None:
         logger.info("EMAIL to=%s subject=%s\n%s", to, subject, body)
+
+
+class ResendEmailSender:
+    """Production sender — sends via Resend REST API using httpx."""
+
+    async def send(self, to: str, subject: str, body: str) -> None:
+        import httpx
+
+        if not settings.resend_api_key:
+            raise RuntimeError("RESEND_API_KEY is not configured")
+
+        payload = {
+            "from": settings.resend_from_address,
+            "to": [to],
+            "subject": subject,
+            "text": body,
+        }
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.resend_api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                logger.error(
+                    "Resend API error: status=%d body=%s",
+                    resp.status_code,
+                    resp.text,
+                )
+                raise RuntimeError(f"Resend API returned {resp.status_code}: {resp.text}")
+
+        logger.info("Email sent via Resend to=%s subject=%s", to, subject)
 
 
 class SendGridEmailSender:
@@ -90,6 +129,8 @@ class SmtpEmailSender:
 
 
 def get_email_sender() -> EmailSender:
+    if settings.email_backend == "resend":
+        return ResendEmailSender()
     if settings.email_backend == "sendgrid":
         return SendGridEmailSender()
     if settings.email_backend == "smtp":

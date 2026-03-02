@@ -53,13 +53,13 @@ variable "base_url" {
   type        = string
 }
 
-variable "sendgrid_api_key_secret_id" {
-  description = "Secret Manager secret ID for SendGrid API key"
+variable "resend_api_key_secret_id" {
+  description = "Secret Manager secret ID for Resend API key"
   type        = string
 }
 
-variable "sendgrid_from_address" {
-  description = "Verified sender email for SendGrid"
+variable "resend_from_address" {
+  description = "Verified sender email for Resend"
   type        = string
   default     = "noreply@arcoa.ai"
 }
@@ -214,22 +214,22 @@ resource "google_cloud_run_v2_service" "api" {
 
       env {
         name  = "EMAIL_BACKEND"
-        value = "sendgrid"
+        value = "resend"
       }
 
       env {
-        name = "SENDGRID_API_KEY"
+        name = "RESEND_API_KEY"
         value_source {
           secret_key_ref {
-            secret  = var.sendgrid_api_key_secret_id
+            secret  = var.resend_api_key_secret_id
             version = "latest"
           }
         }
       }
 
       env {
-        name  = "SENDGRID_FROM_ADDRESS"
-        value = var.sendgrid_from_address
+        name  = "RESEND_FROM_ADDRESS"
+        value = var.resend_from_address
       }
 
       env {
