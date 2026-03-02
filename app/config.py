@@ -98,11 +98,9 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
 
     # Email
-    email_backend: str = "log"  # "log" for dev, "resend" for production, "sendgrid" or "smtp" as alternatives
+    email_backend: str = "log"  # "log" for dev, "resend" for production, "smtp" as alternative
     resend_api_key: str = ""  # Resend API key (re_xxx)
     resend_from_address: str = "noreply@arcoa.ai"
-    sendgrid_api_key: str = ""  # SendGrid API key (SG.xxx)
-    sendgrid_from_address: str = "noreply@arcoa.ai"
     smtp_host: str = "localhost"
     smtp_port: int = 587
     smtp_username: str = ""

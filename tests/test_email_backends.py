@@ -7,7 +7,6 @@ import pytest
 from app.config import settings
 from app.services.email import (
     ResendEmailSender,
-    SendGridEmailSender,
     get_email_sender,
 )
 
@@ -79,21 +78,6 @@ async def test_resend_missing_api_key(resend_settings):
 
     with pytest.raises(RuntimeError, match="RESEND_API_KEY is not configured"):
         await sender.send(to="test@example.com", subject="Test", body="Body")
-
-
-# ---- SendGrid tests ----
-
-@pytest.fixture
-def sendgrid_settings():
-    object.__setattr__(settings, "email_backend", "sendgrid")
-    object.__setattr__(settings, "sendgrid_api_key", "SG.test-key-xxx")
-    object.__setattr__(settings, "sendgrid_from_address", "noreply@arcoa.ai")
-    yield
-
-
-def test_get_email_sender_returns_sendgrid(sendgrid_settings):
-    sender = get_email_sender()
-    assert isinstance(sender, SendGridEmailSender)
 
 
 # ---- Routing tests ----
