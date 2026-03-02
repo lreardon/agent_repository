@@ -53,6 +53,17 @@ variable "base_url" {
   type        = string
 }
 
+variable "sendgrid_api_key_secret_id" {
+  description = "Secret Manager secret ID for SendGrid API key"
+  type        = string
+}
+
+variable "sendgrid_from_address" {
+  description = "Verified sender email for SendGrid"
+  type        = string
+  default     = "noreply@arcoa.ai"
+}
+
 variable "min_instances" {
   type = number
 }
@@ -199,6 +210,31 @@ resource "google_cloud_run_v2_service" "api" {
             version = "latest"
           }
         }
+      }
+
+      env {
+        name  = "EMAIL_BACKEND"
+        value = "sendgrid"
+      }
+
+      env {
+        name = "SENDGRID_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.sendgrid_api_key_secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "SENDGRID_FROM_ADDRESS"
+        value = var.sendgrid_from_address
+      }
+
+      env {
+        name  = "EMAIL_VERIFICATION_REQUIRED"
+        value = "true"
       }
 
       startup_probe {

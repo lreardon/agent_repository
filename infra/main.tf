@@ -244,7 +244,8 @@ module "cloud_run" {
   vpc_connector_id      = module.networking.vpc_connector_id
   cloud_sql_connection  = module.database.connection_name
   db_password_secret_id = module.secrets.db_password_secret_id
-  signing_key_secret_id = module.secrets.signing_key_secret_id
+  signing_key_secret_id      = module.secrets.signing_key_secret_id
+  sendgrid_api_key_secret_id = module.secrets.sendgrid_api_key_secret_id
   redis_host            = module.redis.host
   redis_port            = module.redis.port
   redis_auth_string     = module.redis.auth_string

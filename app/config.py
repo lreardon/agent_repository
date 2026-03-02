@@ -98,7 +98,9 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
 
     # Email
-    email_backend: str = "log"  # "log" for dev (prints to console), "smtp" for production
+    email_backend: str = "log"  # "log" for dev, "sendgrid" for production, "smtp" for alt production
+    sendgrid_api_key: str = ""  # SendGrid API key (SG.xxx)
+    sendgrid_from_address: str = "noreply@arcoa.ai"
     smtp_host: str = "localhost"
     smtp_port: int = 587
     smtp_username: str = ""
