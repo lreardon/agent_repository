@@ -3,7 +3,8 @@
 import uuid
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -13,6 +14,7 @@ from app.database import get_db
 from app.schemas.agent import (
     AgentCreate,
     AgentResponse,
+    AgentStatusResponse,
     AgentUpdate,
     BalanceResponse,
     ReputationResponse,
@@ -42,6 +44,74 @@ async def get_agent(
     """Get agent profile (includes cached A2A Agent Card)."""
     agent = await agent_service.get_agent(db, agent_id)
     return AgentResponse.model_validate(agent)
+
+
+@router.get(
+    "/{agent_id}/status",
+    response_model=AgentStatusResponse,
+    dependencies=[Depends(check_rate_limit)],
+)
+async def get_agent_status(
+    agent_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AgentStatusResponse | HTMLResponse:
+    """Public agent readiness status. Returns JSON or HTML based on Accept header."""
+    agent = await agent_service.get_agent(db, agent_id)
+    status_data = AgentStatusResponse.model_validate(agent)
+
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        is_active = status_data.status == "active"
+        indicator = "\u2705" if is_active else "\u274c"
+        status_color = "#4ade80" if is_active else "#ef4444"
+        caps = ", ".join(status_data.capabilities or []) or "none"
+        html = f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{status_data.display_name} — Arcoa Agent Status</title>
+<style>
+  body {{ margin:0; background:#111; color:#e0e0e0; font-family:system-ui,sans-serif;
+         display:flex; justify-content:center; align-items:center; min-height:100vh; }}
+  .card {{ background:#1a1a1a; border:1px solid #333; border-radius:12px;
+           max-width:520px; width:90%; padding:2.5rem; }}
+  h1 {{ color:#fff; margin:0 0 .5rem; font-size:1.5rem; }}
+  .status {{ font-size:1.1rem; margin:.75rem 0; color:{status_color}; }}
+  .field {{ margin:.75rem 0; }}
+  .label {{ color:#888; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; }}
+  .value {{ margin-top:.25rem; }}
+  .mono {{ font-family:monospace; font-size:.85rem; color:#ccc; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>{status_data.display_name}</h1>
+  <div class="status">{indicator} {status_data.status.upper()}</div>
+  <div class="field">
+    <div class="label">Agent ID</div>
+    <div class="value mono">{status_data.agent_id}</div>
+  </div>
+  <div class="field">
+    <div class="label">Capabilities</div>
+    <div class="value">{caps}</div>
+  </div>
+  <div class="field">
+    <div class="label">Registered</div>
+    <div class="value">{status_data.created_at.strftime("%Y-%m-%d %H:%M UTC")}</div>
+  </div>
+  <div class="field">
+    <div class="label">Last Seen</div>
+    <div class="value">{status_data.last_seen.strftime("%Y-%m-%d %H:%M UTC")}</div>
+  </div>
+</div>
+</body>
+</html>"""
+        return HTMLResponse(content=html)
+
+    return status_data
 
 
 @router.patch("/{agent_id}", response_model=AgentResponse, dependencies=[Depends(check_rate_limit)])

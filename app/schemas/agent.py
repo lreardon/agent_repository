@@ -131,6 +131,24 @@ class AgentResponse(BaseModel):
     last_seen: datetime
 
 
+class AgentStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    agent_id: uuid.UUID
+    display_name: str
+    status: str
+    capabilities: list[str] | None
+    created_at: datetime
+    last_seen: datetime
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def serialize_status(cls, v: object) -> str:
+        if hasattr(v, "value"):
+            return v.value
+        return str(v)
+
+
 class BalanceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

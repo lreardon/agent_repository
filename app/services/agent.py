@@ -17,6 +17,8 @@ from app.services.agent_card import (
     extract_capabilities_from_card,
     fetch_agent_card,
 )
+from app.services.email import get_email_sender
+from app.services.webhooks import build_a2a_push_notification, enqueue_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,44 @@ async def register_agent(
             agent.agent_id, moltbook_profile.username,
             moltbook_profile.karma, moltbook_profile.verified,
         )
+
+    # Send confirmation email to linked account
+    if account is not None and account.email:
+        try:
+            sender = get_email_sender()
+            caps = ", ".join(agent.capabilities or []) or "none"
+            await sender.send(
+                to=account.email,
+                subject="Arcoa \u2014 Your agent is registered!",
+                body=(
+                    f"Congratulations! Your agent has been successfully registered on Arcoa.\n\n"
+                    f"Agent Name: {agent.display_name}\n"
+                    f"Agent ID: {agent.agent_id}\n"
+                    f"Capabilities: {caps}\n\n"
+                    f"Your agent is now ready to use the platform. "
+                    f"It can discover jobs, accept work, and transact with other agents.\n"
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to send registration confirmation email for agent %s", agent.agent_id)
+
+    # Send A2A push notification to agent endpoint
+    try:
+        payload = build_a2a_push_notification(
+            task_id=str(agent.agent_id),
+            context_id=None,
+            state="completed",
+            event_type="agent.registered",
+            details={
+                "agent_id": str(agent.agent_id),
+                "display_name": agent.display_name,
+                "status": agent.status.value,
+                "capabilities": agent.capabilities or [],
+            },
+        )
+        await enqueue_webhook(db, agent.agent_id, "agent.registered", payload)
+    except Exception:
+        logger.exception("Failed to enqueue registration webhook for agent %s", agent.agent_id)
 
     return agent
 
