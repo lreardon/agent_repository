@@ -112,7 +112,12 @@ class Settings(BaseSettings):
     email_verification_required: bool = False  # Set True in production to gate registration
 
     # CORS
-    cors_allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    cors_allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://staging.arcoa.ai",
+        "https://arcoa.ai",
+    ]
 
     # Webhook
     webhook_timeout_seconds: int = 10
