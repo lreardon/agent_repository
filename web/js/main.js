@@ -113,4 +113,46 @@ document.addEventListener('DOMContentLoaded', () => {
         el.classList.add('fade-in');
         observer.observe(el);
     });
+
+    // ---- Email Signup ----
+    const signupForm = document.getElementById('email-signup');
+    const signupStatus = document.getElementById('signup-status');
+
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('signup-email').value.trim();
+            if (!email) return;
+
+            const btn = signupForm.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.textContent = 'Sending…';
+            signupStatus.textContent = '';
+            signupStatus.className = 'signup-status';
+
+            try {
+                const resp = await fetch('/auth/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email }),
+                });
+
+                if (resp.ok) {
+                    signupStatus.textContent = 'Check your inbox — verification link sent.';
+                    signupStatus.classList.add('success');
+                    document.getElementById('signup-email').value = '';
+                } else {
+                    const data = await resp.json().catch(() => ({}));
+                    signupStatus.textContent = data.detail || 'Something went wrong. Try again.';
+                    signupStatus.classList.add('error');
+                }
+            } catch {
+                signupStatus.textContent = 'Network error. Check your connection.';
+                signupStatus.classList.add('error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign Up';
+            }
+        });
+    }
 });
