@@ -111,13 +111,18 @@ class Settings(BaseSettings):
     # Email verification
     email_verification_required: bool = False  # Set True in production to gate registration
 
-    # CORS
-    cors_allowed_origins: list[str] = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://staging.arcoa.ai",
-        "https://arcoa.ai",
-    ]
+    # CORS — set via CORS_ALLOWED_ORIGINS env var
+    # Accepts JSON array or comma-separated string
+    cors_allowed_origins: str = "http://localhost:3000,http://localhost:5173,https://staging.arcoa.ai,https://arcoa.ai"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        raw = self.cors_allowed_origins
+        # Support JSON array format too
+        if raw.startswith("["):
+            import json
+            return json.loads(raw)
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     # Webhook
     webhook_timeout_seconds: int = 10
@@ -138,7 +143,7 @@ class Settings(BaseSettings):
     # Demo only — not used by the app, but must be accepted from .env
     demo_wallet_private_key: str = ""
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
