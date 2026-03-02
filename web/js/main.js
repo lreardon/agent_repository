@@ -131,7 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
             signupStatus.className = 'signup-status';
 
             try {
-                const resp = await fetch('/auth/signup', {
+                const apiBase = window.ARCOA_API_BASE || 'https://api.staging.arcoa.ai';
+                const resp = await fetch(apiBase + '/auth/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email }),
