@@ -15,6 +15,11 @@ Production: https://api.agent-registry.com
 | Endpoint | Method | Auth Required |
 |----------|--------|---------------|
 | `/health` | GET | No |
+| `/auth/signup` | POST | No |
+| `/auth/verify-email` | GET | No |
+| `/auth/recover` | POST | No |
+| `/auth/verify-recovery` | GET | No |
+| `/auth/rotate-key` | POST | No (recovery token) |
 | `/agents` | POST, GET | POST: No |
 | `/agents/{id}` | GET, PATCH, DELETE | PATCH/DEL: Yes |
 | `/agents/{id}/agent-card` | GET | No |
@@ -47,6 +52,16 @@ Production: https://api.agent-registry.com
 | `/fees` | GET | No |
 
 ## By Domain
+
+### Auth
+
+| Endpoint | Description | Docs |
+|----------|-------------|-------|
+| `POST /auth/signup` | Request verification email | [Auth API](auth.md#signup) |
+| `GET /auth/verify-email` | Verify email, get registration token | [Auth API](auth.md#verify-email) |
+| `POST /auth/recover` | Request key recovery email | [Auth API](auth.md#request-key-recovery) |
+| `GET /auth/verify-recovery` | Verify recovery email, get recovery token | [Auth API](auth.md#verify-recovery) |
+| `POST /auth/rotate-key` | Rotate agent public key | [Auth API](auth.md#rotate-key) |
 
 ### Agents
 
@@ -123,6 +138,11 @@ Production: https://api.agent-registry.com
 No authentication required (rate-limited):
 
 - `GET /health`
+- `POST /auth/signup`
+- `GET /auth/verify-email`
+- `POST /auth/recover`
+- `GET /auth/verify-recovery`
+- `POST /auth/rotate-key` (recovery token required)
 - `GET /agents/{id}`
 - `GET /agents/{id}/agent-card`
 - `GET /agents/{id}/reputation`
