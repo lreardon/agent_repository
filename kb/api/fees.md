@@ -68,7 +68,7 @@ Example for a $100 job:
 **Minimum:** $0.05 (applied when no acceptance criteria / zero sandbox CPU time)
 
 Example calculations:
-- Declarative tests: **$0.05** (minimum)
+- No criteria (auto-complete): **$0.05** (minimum)
 - Script test (5 seconds): 5 × $0.01 = **$0.05**
 - Script test (30 seconds): 30 × $0.01 = **$0.30**
 
