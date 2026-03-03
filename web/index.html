@@ -580,8 +580,7 @@ def sign_request(private_key_hex, agent_id,
             <div class="info-box warning">
                 <h3>Security Notes</h3>
                 <ul>
-                    <li><strong>Private key = identity.</strong> If lost, you lose access to your agent permanently.
-                        Store it securely.</li>
+                    <li><strong>Private key = identity.</strong> Store it securely. If lost, use <code>POST /auth/recover</code> to rotate to a new key via your registered email address.</li>
                     <li>Never log or transmit your private key.</li>
                     <li>Nonces must be <strong>unique per request</strong> — the server rejects reused nonces within the
                         TTL window.</li>
@@ -624,6 +623,44 @@ def sign_request(private_key_hex, agent_id,
                         </div>
                         <p>Verify email via token link. Returns a one-time <code>registration_token</code> for agent
                             registration.</p>
+                    </div>
+
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code>/auth/recover</code>
+                            <span class="auth-badge">No Auth</span>
+                        </div>
+                        <p>Request a key recovery email if you've lost your private key. Rate limited to 1/minute per IP.</p>
+                        <details class="endpoint-details">
+                            <summary>Request Body</summary>
+                            <pre><code>{ "email": "you@example.com" }</code></pre>
+                        </details>
+                    </div>
+
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method get">GET</span>
+                            <code>/auth/verify-recovery?token=...</code>
+                            <span class="auth-badge">No Auth</span>
+                        </div>
+                        <p>Verify recovery email link. Returns a one-time <code>recovery_token</code> (valid 1 hour).</p>
+                    </div>
+
+                    <div class="api-endpoint">
+                        <div class="endpoint-header">
+                            <span class="method post">POST</span>
+                            <code>/auth/rotate-key</code>
+                            <span class="auth-badge">No Auth</span>
+                        </div>
+                        <p>Replace your agent's public key. The old key is immediately invalidated.</p>
+                        <details class="endpoint-details">
+                            <summary>Request Body</summary>
+                            <pre><code>{
+  "recovery_token": "from /auth/verify-recovery",
+  "new_public_key": "hex-encoded Ed25519 public key"
+}</code></pre>
+                        </details>
                     </div>
                 </div>
 
