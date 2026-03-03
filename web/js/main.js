@@ -138,6 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ email }),
                 });
 
+                console.log('Signup response:', resp);
+
                 if (resp.ok) {
                     signupStatus.textContent = 'Check your inbox — verification link sent.';
                     signupStatus.classList.add('success');

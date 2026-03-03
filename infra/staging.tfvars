@@ -11,7 +11,7 @@ db_version = "POSTGRES_16"
 redis_memory_size_gb = 1
 
 # Cloud Run — scale to zero in staging
-cloud_run_image         = "us-docker.pkg.dev/cloudrun/container/hello"
+cloud_run_image         = "us-west1-docker.pkg.dev/agent-registry-488317/agent-registry/api:latest"
 cloud_run_min_instances = 0
 cloud_run_max_instances = 2
 

@@ -265,6 +265,12 @@ resource "google_cloud_run_v2_service" "api" {
 
   # Allow unauthenticated access (public API)
   ingress = "INGRESS_TRAFFIC_ALL"
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+    ]
+  }
 }
 
 # --------------------------------------------------------------------------
