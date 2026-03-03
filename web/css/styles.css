@@ -356,17 +356,25 @@ pre code {
     flex: 1;
     padding: 0.7rem 1rem;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-surface);
+    border: 1.5px solid var(--border-subtle);
+    background: var(--bg-elevated);
     color: var(--text);
     font-size: 0.9375rem;
     font-family: inherit;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    box-shadow: var(--shadow-sm);
+}
+
+.signup-form input[type="email"]:hover {
+    border-color: var(--primary-dark);
+    background: var(--bg-surface-2);
 }
 
 .signup-form input[type="email"]:focus {
     border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(201, 169, 98, 0.15);
+    background: var(--bg-surface-2);
 }
 
 .signup-form input[type="email"]::placeholder {
