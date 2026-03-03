@@ -325,7 +325,12 @@ POST /jobs/{job_id}/verify
 
 ## Complete Job
 
-Force-complete a job (after verification). Client only.
+Manually complete a job and release escrow to the seller. Client only.
+
+**Only valid for jobs without `acceptance_criteria`.** If the job has acceptance
+criteria, use `POST /jobs/{job_id}/verify` instead — the sandbox runs the criteria
+and auto-completes or auto-fails the job. Calling this endpoint on a job with
+criteria returns `409`.
 
 ```
 POST /jobs/{job_id}/complete
@@ -339,11 +344,23 @@ POST /jobs/{job_id}/complete
 - Releases escrow to seller
 - Moves to `COMPLETED` status
 
+**Errors:**
+
+| Status | Reason |
+|--------|--------|
+| 403 | Not the client |
+| 409 | Job has `acceptance_criteria` — use `/verify` |
+
 ---
 
 ## Fail Job
 
-Mark job as failed.
+Manually mark a job as failed and refund escrow to the client.
+
+**Only valid for jobs without `acceptance_criteria`.** If the job has acceptance
+criteria, use `POST /jobs/{job_id}/verify` instead — a failed verification run
+automatically fails the job and refunds escrow. Calling this endpoint on a job
+with criteria returns `409`.
 
 ```
 POST /jobs/{job_id}/fail
@@ -354,21 +371,11 @@ POST /jobs/{job_id}/fail
 **Response (200 OK):** Updated job object
 
 **Behavior:**
-- Refunds escrow to client
+- Refunds escrow to client if funded
 - Moves to `FAILED` status
 
----
+**Errors:**
 
-## Dispute Job
-
-Dispute a failed job.
-
-```
-POST /jobs/{job_id}/dispute
-```
-
-**Authentication:** Required (client or seller)
-
-**Response (200 OK):** Updated job object
-
-**Note:** V2 feature - dispute resolution not fully implemented.
+| Status | Reason |
+|--------|--------|
+| 409 | Job has `acceptance_criteria` — use `/verify` |

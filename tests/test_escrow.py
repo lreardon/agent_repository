@@ -30,12 +30,17 @@ async def _propose_and_accept(
     client_id: str, client_priv: str,
     seller_id: str, seller_priv: str,
     budget: str = "100.00",
+    acceptance_criteria: dict | None = None,
 ) -> str:
-    """Propose a job and have seller accept. Returns job_id."""
+    """Propose a job and have seller accept. Returns job_id.
+
+    Defaults to no acceptance_criteria so tests can use /complete and /fail freely.
+    Pass acceptance_criteria explicitly for tests that exercise /verify.
+    """
     data = {
         "seller_agent_id": seller_id,
         "max_budget": budget,
-        "acceptance_criteria": {"version": "1.0", "tests": []},
+        "acceptance_criteria": acceptance_criteria,
     }
     body = data
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", body)
@@ -43,11 +48,14 @@ async def _propose_and_accept(
     assert resp.status_code == 201
     job_id = resp.json()["job_id"]
 
-    # Seller accepts (must provide criteria hash)
-    criteria = {"version": "1.0", "tests": []}
-    accept_data = {"acceptance_criteria_hash": hash_criteria(criteria)}
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
-    resp = await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
+    # Seller accepts (provide criteria hash only if criteria are set)
+    accept_data = {}
+    if acceptance_criteria is not None:
+        accept_data["acceptance_criteria_hash"] = hash_criteria(acceptance_criteria)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept",
+                                accept_data if accept_data else b"")
+    resp = await client.post(f"/jobs/{job_id}/accept",
+                             json=accept_data if accept_data else None, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["status"] == "agreed"
     return job_id

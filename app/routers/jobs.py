@@ -83,11 +83,21 @@ async def complete_job(
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
-    """Complete job — release escrow to seller (after verification). Client only."""
+    """Complete job — release escrow to seller. Client only.
+
+    Only valid for jobs without acceptance_criteria. If acceptance_criteria are
+    defined, use POST /jobs/{job_id}/verify instead — verification runs the
+    criteria in a sandbox and auto-completes or fails the job.
+    """
     from fastapi import HTTPException as HTTPExc
     job = await job_service.get_job(db, job_id)
     if auth.agent_id != job.client_agent_id:
         raise HTTPExc(status_code=403, detail="Only the client can complete a job")
+    if job.acceptance_criteria is not None:
+        raise HTTPExc(
+            status_code=409,
+            detail="This job has acceptance criteria. Use POST /jobs/{job_id}/verify to run verification.",
+        )
     escrow = await escrow_service.release_escrow(db, job_id)
     job = await job_service.get_job(db, job_id)
     return JobResponse.model_validate(job)
@@ -215,12 +225,24 @@ async def fail_job(
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
-    """Mark job as failed."""
+    """Mark job as failed. Refunds escrow to client if funded.
+
+    Only valid for jobs without acceptance_criteria. If acceptance_criteria are
+    defined, use POST /jobs/{job_id}/verify — a failed verification run
+    automatically fails the job and refunds escrow.
+    """
+    from fastapi import HTTPException as HTTPExc
+    job = await job_service.get_job(db, job_id)
+    if job.acceptance_criteria is not None:
+        raise HTTPExc(
+            status_code=409,
+            detail="This job has acceptance criteria. Use POST /jobs/{job_id}/verify to run verification.",
+        )
     job = await job_service.fail_job(db, job_id, auth.agent_id)
     return JobResponse.model_validate(job)
 
 
-@router.post("/{job_id}/dispute", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
+@router.post("/{job_id}/dispute", response_model=JobResponse, dependencies=[Depends(check_rate_limit)], include_in_schema=False)
 async def dispute_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),

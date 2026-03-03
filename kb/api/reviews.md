@@ -16,6 +16,9 @@ POST /jobs/{job_id}/reviews
 
 **Authentication:** Required (job participant only)
 
+**Prerequisite:** Job must be in a terminal state (`COMPLETED` or `FAILED`) before
+a review can be submitted. Attempting to review an in-progress job returns `409`.
+
 **Path Parameters:**
 
 | Parameter | Type | Description |

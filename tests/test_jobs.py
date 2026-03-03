@@ -330,6 +330,7 @@ async def _deposit(client: AsyncClient, agent_id: str, priv: str, amount: str) -
 
 async def _get_funded_job(
     client: AsyncClient,
+    acceptance_criteria: dict | None = _DEFAULT_CRITERIA,
 ) -> tuple[str, str, str, str, str]:
     """Create two agents, propose, accept, fund. Returns (job_id, client_id, client_priv, seller_id, seller_priv)."""
     client_id, client_priv = await _create_agent(client)
@@ -338,11 +339,12 @@ async def _get_funded_job(
     await _deposit(client, client_id, client_priv, "500.00")
     await _deposit(client, seller_id, seller_priv, "10.00")  # Seller needs balance for storage fee
 
-    job = await _propose_job(client, client_id, client_priv, seller_id, "100.00")
+    job = await _propose_job(client, client_id, client_priv, seller_id, "100.00",
+                             acceptance_criteria=acceptance_criteria)
     job_id = job["job_id"]
 
     # Accept (seller provides criteria hash)
-    await _seller_accept(client, seller_id, seller_priv, job_id)
+    await _seller_accept(client, seller_id, seller_priv, job_id, criteria=acceptance_criteria)
 
     # Fund
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
@@ -443,7 +445,7 @@ async def test_cannot_deliver_if_not_in_progress(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_fail_job(client: AsyncClient) -> None:
     """J7: Mark in-progress job as failed."""
-    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client, acceptance_criteria=None)
 
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
     await client.post(f"/jobs/{job_id}/start", headers=headers)
@@ -457,7 +459,7 @@ async def test_fail_job(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_fail_funded_job_auto_refunds(client: AsyncClient) -> None:
     """J8: Failing a funded job auto-refunds escrow to client."""
-    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client, acceptance_criteria=None)
 
     # Check client balance after funding (should be 500 - 100 = 400)
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
@@ -481,7 +483,7 @@ async def test_fail_funded_job_auto_refunds(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_dispute_disabled_v1(client: AsyncClient) -> None:
     """J9: Disputes return 501 in V1 — use reviews instead."""
-    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client, acceptance_criteria=None)
 
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
     await client.post(f"/jobs/{job_id}/start", headers=headers)
@@ -574,8 +576,8 @@ async def test_counter_by_non_party(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_full_lifecycle_propose_to_complete(client: AsyncClient) -> None:
-    """J15: Full lifecycle: propose → accept → fund → start → deliver → complete."""
-    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+    """J15: Full lifecycle: propose → accept → fund → start → deliver → complete (no criteria)."""
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client, acceptance_criteria=None)
 
     # Start
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
@@ -804,8 +806,8 @@ async def test_result_redacted_in_delivered_state(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_result_redacted_in_failed_state(client: AsyncClient) -> None:
-    """RR2: Deliverable is not visible after verification failure."""
-    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+    """RR2: Deliverable is not visible after manual failure (no criteria job)."""
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client, acceptance_criteria=None)
 
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
     await client.post(f"/jobs/{job_id}/start", headers=headers)
@@ -826,8 +828,8 @@ async def test_result_redacted_in_failed_state(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_result_visible_after_completion(client: AsyncClient) -> None:
-    """RR3: Deliverable IS visible once job is completed and escrow released."""
-    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+    """RR3: Deliverable IS visible once job is completed and escrow released (no criteria job)."""
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client, acceptance_criteria=None)
 
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
     await client.post(f"/jobs/{job_id}/start", headers=headers)
@@ -843,3 +845,37 @@ async def test_result_visible_after_completion(client: AsyncClient) -> None:
     resp = await client.get(f"/jobs/{job_id}", headers=headers)
     assert resp.json()["status"] == "completed"
     assert resp.json()["result"]["output"] == "final deliverable"
+
+
+@pytest.mark.asyncio
+async def test_complete_rejects_job_with_acceptance_criteria(client: AsyncClient) -> None:
+    """J-NEW: POST /complete returns 409 when job has acceptance_criteria — use /verify."""
+    job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)
+    # _get_funded_job uses _DEFAULT_CRITERIA by default
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    result = {"result": {"output": "done"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", result)
+    await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
+
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 409
+    assert "verify" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_fail_rejects_job_with_acceptance_criteria(client: AsyncClient) -> None:
+    """J-NEW: POST /fail returns 409 when job has acceptance_criteria — use /verify."""
+    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+    # _get_funded_job uses _DEFAULT_CRITERIA by default
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    resp = await client.post(f"/jobs/{job_id}/fail", headers=headers)
+    assert resp.status_code == 409
+    assert "verify" in resp.json()["detail"].lower()

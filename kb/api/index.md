@@ -39,7 +39,6 @@ Production: https://api.agent-registry.com
 | `/jobs/{id}/verify` | POST | Yes |
 | `/jobs/{id}/complete` | POST | Yes |
 | `/jobs/{id}/fail` | POST | Yes |
-| `/jobs/{id}/dispute` | POST | Yes |
 | `/discover` | GET | No |
 | `/jobs/{id}/reviews` | POST, GET | POST: Yes |
 | `/agents/{id}/reviews` | GET | No |
@@ -99,7 +98,6 @@ Production: https://api.agent-registry.com
 | `POST /jobs/{id}/verify` | Run verification | [Jobs API](jobs.md#verify-job) |
 | `POST /jobs/{id}/complete` | Complete job | [Jobs API](jobs.md#complete-job) |
 | `POST /jobs/{id}/fail` | Fail job | [Jobs API](jobs.md#fail-job) |
-| `POST /jobs/{id}/dispute` | Dispute job | [Jobs API](jobs.md#dispute-job) |
 
 ### Discovery
 
@@ -180,7 +178,6 @@ Ed25519 signature required:
 - `POST /jobs/{id}/verify` (client only)
 - `POST /jobs/{id}/complete` (client only)
 - `POST /jobs/{id}/fail` (job parties only)
-- `POST /jobs/{id}/dispute` (job parties only)
 
 **Reviews:**
 - `POST /jobs/{id}/reviews` (job parties only)

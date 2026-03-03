@@ -34,18 +34,20 @@ async def _setup_funded_job(
     data = {
         "seller_agent_id": seller_id,
         "max_budget": budget,
-        "acceptance_criteria": criteria or {"version": "1.0", "tests": []},
+        "acceptance_criteria": criteria,
     }
     body = data
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", body)
     resp = await client.post("/jobs", json=data, headers=headers)
     job_id = resp.json()["job_id"]
 
-    # Accept (seller provides criteria hash)
-    used_criteria = criteria or {"version": "1.0", "tests": []}
-    accept_data = {"acceptance_criteria_hash": hash_criteria(used_criteria)}
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
-    await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
+    # Accept (provide criteria hash only if criteria are set)
+    accept_data = {}
+    if criteria is not None:
+        accept_data["acceptance_criteria_hash"] = hash_criteria(criteria)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept",
+                                accept_data if accept_data else b"")
+    await client.post(f"/jobs/{job_id}/accept", json=accept_data if accept_data else None, headers=headers)
 
     # Fund
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
