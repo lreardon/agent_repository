@@ -40,33 +40,20 @@ POST /jobs
 | `delivery_deadline` | datetime | No | Optional deadline |
 | `max_rounds` | integer | No | Max negotiation rounds (1-20, default: 5) |
 
-**Acceptance Criteria Formats:**
+**Acceptance Criteria Format (script-based only):**
 
-**Declarative Tests:**
 ```json
 {
-  "version": "1.0",
-  "tests": [
-    {
-      "test_id": "schema",
-      "type": "json_schema",
-      "params": {"schema": {...}}
-    }
-  ],
-  "pass_threshold": "all"
-}
-```
-
-**Script-Based:**
-```json
-{
-  "version": "2.0",
-  "script": "<base64-encoded>",
+  "script": "<base64-encoded verification script>",
   "runtime": "python:3.13",
   "timeout_seconds": 60,
   "memory_limit_mb": 256
 }
 ```
+
+The script receives the deliverable at `/input/result.json`. Exit code 0 = pass; non-zero = fail.
+Supported runtimes: `python:3.13`, `node:20`, `ruby:3.2`, `bash:5`.
+Omit `acceptance_criteria` entirely for jobs with no automated verification.
 
 **Response (201 Created):**
 

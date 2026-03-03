@@ -1,5 +1,6 @@
 """Tests for job lifecycle and negotiation protocol."""
 
+import base64
 import json
 
 import pytest
@@ -17,7 +18,11 @@ async def _create_agent(client: AsyncClient) -> tuple[str, str]:
     return resp.json()["agent_id"], priv
 
 
-_DEFAULT_CRITERIA = {"version": "1.0", "tests": []}
+# Minimal valid script-based criteria used in tests that exercise the accept flow
+# (criteria hash must be provided on accept). Does not run sandbox — only used for
+# proposal/negotiation tests, not verification.
+_PASS_SCRIPT = base64.b64encode(b"import sys; sys.exit(0)").decode()
+_DEFAULT_CRITERIA = {"script": _PASS_SCRIPT, "runtime": "python:3.13"}
 
 
 async def _propose_job(

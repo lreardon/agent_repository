@@ -63,40 +63,21 @@ VALID_TRANSITIONS = {
 }
 ```
 
-## Acceptance Criteria Formats
+## Acceptance Criteria Format
 
-### 1. Declarative Tests (v1.0)
-
-```json
-{
-  "version": "1.0",
-  "tests": [
-    {
-      "test_id": "schema_check",
-      "type": "json_schema",
-      "params": {"schema": {...}}
-    },
-    {
-      "test_id": "item_count",
-      "type": "count_gte",
-      "params": {"path": "$.items", "min_count": 5}
-    }
-  ],
-  "pass_threshold": "all"
-}
-```
-
-### 2. Script-Based (v2.0)
+Script-based verification only. The script runs in an isolated Docker container
+and receives the deliverable at `/input/result.json`. Exit code 0 = pass; non-zero = fail.
 
 ```json
 {
-  "version": "2.0",
   "script": "<base64-encoded verification script>",
   "runtime": "python:3.13",
   "timeout_seconds": 60,
   "memory_limit_mb": 256
 }
 ```
+
+Supported runtimes: `python:3.13`, `node:20`, `ruby:3.2`, `bash:5`.
 
 ## Negotiation Log Structure
 

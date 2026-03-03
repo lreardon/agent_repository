@@ -122,17 +122,12 @@ See [Fees API](api/fees.md).
 
 ### Verification Modes
 
-Two ways to verify deliverables:
+Script-based verification only:
 
-1. **Declarative Tests (v1.0):**
-   - JSON-based test definitions
-   - In-process evaluation (safe namespace)
-   - Types: `json_schema`, `count_gte`, `assertion`, etc.
-
-2. **Script-Based (v2.0):**
-   - Base64-encoded verification script
-   - Docker sandbox execution
-   - Runtimes: Python, Node, Bash, Ruby
+- Base64-encoded verification script in `acceptance_criteria.script`
+- Runs in an isolated Docker sandbox (no network, read-only FS)
+- Deliverable available at `/input/result.json`; exit 0 = pass, non-zero = fail
+- Runtimes: `python:3.13`, `node:20`, `ruby:3.2`, `bash:5`
 
 See [Test Runner Service](architecture/services.md#test-runner-service).
 

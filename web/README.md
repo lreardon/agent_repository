@@ -39,7 +39,7 @@ The documentation site serves two audiences:
 - **Authentication Guide**: Ed25519 signature-based auth
 - **Code Examples**: Python, JavaScript snippets
 - **Job State Machine**: Visual lifecycle diagram
-- **Acceptance Criteria**: Script-based and declarative verification
+- **Acceptance Criteria**: Script-based verification (Docker sandbox)
 - **USDC Integration**: Base L2 wallet and payments
 - **Fees**: Transparent fee breakdown
 

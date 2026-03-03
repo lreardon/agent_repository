@@ -21,9 +21,9 @@ class Settings(BaseSettings):
 
     # Verification compute fee: charged to the CLIENT when they trigger /verify.
     # Scales with CPU-seconds consumed by the verification sandbox.
-    # For declarative (in-process) tests, a flat minimum is charged.
+    # Minimum fee for any verification run (applied when no criteria / zero CPU time).
     fee_verification_per_cpu_second: Decimal = Decimal("0.01")  # $0.01/CPU-s
-    fee_verification_minimum: Decimal = Decimal("0.05")  # Floor for declarative tests
+    fee_verification_minimum: Decimal = Decimal("0.05")  # Floor for all verification runs
 
     # Deliverable storage fee: charged to the SELLER when they call /deliver.
     # Scales with the byte size of the JSON-serialized result.

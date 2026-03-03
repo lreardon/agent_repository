@@ -216,83 +216,41 @@ Client                          Platform                         Seller
 
 ---
 
-## 4. Test-Driven Acceptance Criteria
+## 4. Script-Based Acceptance Criteria
 
-This is the core mechanism for trustless job completion. The client defines acceptance criteria upfront as a structured test suite. The seller agrees to these criteria during negotiation. On delivery, the platform runs the tests automatically.
+This is the core mechanism for trustless job completion. The client defines a verification script upfront. The seller agrees to it during negotiation. On delivery, the platform runs the script automatically in an isolated Docker sandbox.
 
 ### Acceptance Criteria Schema
 
 ```json
 {
-  "version": "1.0",
-  "tests": [
-    {
-      "test_id": "output_format_valid",
-      "type": "json_schema",
-      "description": "Output must be valid JSON matching the specified schema",
-      "params": {
-        "schema": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["owner_name", "property_address", "units"],
-            "properties": {
-              "owner_name": { "type": "string", "minLength": 1 },
-              "property_address": { "type": "string" },
-              "units": { "type": "integer", "minimum": 1 }
-            }
-          }
-        }
-      }
-    },
-    {
-      "test_id": "minimum_records",
-      "type": "count_gte",
-      "description": "Must return at least 100 records",
-      "params": {
-        "path": "$",
-        "min_count": 100
-      }
-    },
-    {
-      "test_id": "no_nulls_in_required",
-      "type": "assertion",
-      "description": "No null values in required fields",
-      "params": {
-        "expression": "all(r['owner_name'] is not None and r['property_address'] is not None for r in output)"
-      }
-    },
-    {
-      "test_id": "latency_check",
-      "type": "latency_lte",
-      "description": "Delivery must arrive before deadline",
-      "params": {
-        "max_seconds": 3600
-      }
-    }
-  ],
-  "pass_threshold": "all"
+  "script": "<base64-encoded verification script>",
+  "runtime": "python:3.13",
+  "timeout_seconds": 60,
+  "memory_limit_mb": 256
 }
 ```
 
-### Built-in Test Types (v1)
+The script receives the deliverable at `/input/result.json`. Exit code 0 = pass (escrow released); non-zero = fail (escrow refunded). Supported runtimes: `python:3.13`, `node:20`, `ruby:3.2`, `bash:5`.
 
-| Type          | What it checks                                       | Params                   |
-| ------------- | ---------------------------------------------------- | ------------------------ |
-| `json_schema` | Output validates against JSON Schema                 | `schema`                 |
-| `count_gte`   | Array at JSONPath has ≥ N items                      | `path`, `min_count`      |
-| `count_lte`   | Array at JSONPath has ≤ N items                      | `path`, `max_count`      |
-| `assertion`   | Python expression evaluates to True                  | `expression` (sandboxed) |
-| `contains`    | Output contains substring/regex                      | `pattern`, `is_regex`    |
-| `latency_lte` | Delivery within N seconds of `start`                 | `max_seconds`            |
-| `http_status` | If deliverable is a URL, GET returns expected status | `expected_status`        |
-| `checksum`    | SHA-256 of output matches expected                   | `expected_hash`          |
+### Example Script (Python)
 
-### Pass Threshold Options
+```python
+import sys, json
 
-- `"all"` — every test must pass (default)
-- `"majority"` — >50% of tests pass
-- `{"min_pass": 3}` — at least 3 tests must pass
+data = json.load(open('/input/result.json'))
+records = data.get('records', [])
+
+if len(records) < 100:
+    print(f"Too few records: {len(records)}", file=sys.stderr)
+    sys.exit(1)
+
+if any(r.get('owner_name') is None for r in records):
+    print("Null owner_name found", file=sys.stderr)
+    sys.exit(1)
+
+sys.exit(0)
+```
 
 ### Execution Flow
 
@@ -300,35 +258,25 @@ This is the core mechanism for trustless job completion. The client defines acce
 Seller delivers → POST /jobs/:id/deliver { result: { ... } }
                       │
                       ▼
-            Platform runs test suite
-            (sandboxed, time-limited)
+
+         Platform runs script in Docker sandbox
+         (no network, read-only FS, time-limited)
                       │
               ┌───────┴───────┐
               ▼               ▼
-          All pass         Any fail
+          exit 0           exit ≠ 0
               │               │
               ▼               ▼
     Release escrow      Refund escrow
     status: completed   status: failed
-              │               │
-              ▼               ▼
-    Both parties can    Both parties can
-    leave reviews       leave reviews
-                              │
-                              ▼
-                    Seller can dispute
-                    (triggers manual review)
 ```
 
-### Sandboxing the Test Runner
+### Sandbox Constraints
 
-Acceptance tests run in an isolated environment:
-
-- **Timeout**: 60 seconds max per test, 300 seconds max per suite.
-- **No network**: Tests cannot make outbound calls (prevents data exfiltration).
-- **No filesystem**: Tests operate only on the deliverable payload.
-- **Memory limit**: 256MB per test run.
-- **The `assertion` type**: Runs in a restricted Python sandbox (no imports, no builtins except safe math/string ops). Evaluated via AST parsing — no `eval()`.
+- **No network**: Script cannot make outbound calls.
+- **Read-only filesystem**: Except `/tmp`. Deliverable mounted at `/input/result.json`.
+- **Timeout**: Configurable, max 300 seconds.
+- **Memory limit**: Configurable, max 512MB.
 
 ### Dispute Resolution (v1: Simple)
 

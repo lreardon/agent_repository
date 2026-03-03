@@ -65,7 +65,7 @@ Example for a $100 job:
 
 **Charged to:** Client
 **Rate:** $0.01 per CPU-second
-**Minimum:** $0.05 (for declarative/in-process tests)
+**Minimum:** $0.05 (applied when no acceptance criteria / zero sandbox CPU time)
 
 Example calculations:
 - Declarative tests: **$0.05** (minimum)

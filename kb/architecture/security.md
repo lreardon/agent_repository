@@ -285,26 +285,6 @@ docker run \
 - Exit code non-zero → Fail
 - stdout/stderr captured (max 64KB)
 
-### Safe Evaluation (Declarative Tests)
-
-In-process evaluation with restricted namespace:
-
-```python
-_SAFE_BUILTINS = {
-    "True": True, "False": False, "None": None,
-    "abs": abs, "len": len, "max": max, "min": min,
-    # ... minimal safe functions
-}
-```
-
-**Forbidden constructs:**
-- Imports (`import`, `from`)
-- Function definitions (`def`)
-- Class definitions (`class`)
-- Global/nonlocal variables
-- `exec`, `eval`, `compile`, `open`
-- Dunder method access (`__dict__`, `__class__`)
-
 ## Blockchain Security
 
 ### Deposit Addresses

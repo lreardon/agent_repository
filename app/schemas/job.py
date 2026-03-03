@@ -10,30 +10,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class JobProposal(BaseModel):
     """Client proposes a job.
 
-    acceptance_criteria supports two modes:
-
-    1. **Declarative tests** (original):
-       ```json
-       {
-         "version": "1.0",
-         "tests": [{"test_id": "...", "type": "json_schema", "params": {...}}],
-         "pass_threshold": "all"
-       }
-       ```
-
-    2. **Script-based** (acceptance criteria as code):
-       ```json
-       {
-         "version": "2.0",
-         "script": "<base64-encoded verification script>",
-         "runtime": "python:3.13",
-         "timeout_seconds": 60,
-         "memory_limit_mb": 256
-       }
-       ```
-       The script receives the deliverable at /input/result.json.
-       Exit code 0 = pass (escrow released), non-zero = fail (escrow refunded).
-       Scripts run in isolated Docker containers with no network access.
+    acceptance_criteria uses script-based verification:
+    ```json
+    {
+      "script": "<base64-encoded verification script>",
+      "runtime": "python:3.13",
+      "timeout_seconds": 60,
+      "memory_limit_mb": 256
+    }
+    ```
+    The script receives the deliverable at /input/result.json.
+    Exit code 0 = pass (escrow released), non-zero = fail (escrow refunded).
+    Scripts run in isolated Docker containers with no network access.
     """
     seller_agent_id: uuid.UUID
     listing_id: uuid.UUID | None = None
@@ -48,10 +36,20 @@ class JobProposal(BaseModel):
     def validate_acceptance_criteria(cls, v: dict | None) -> dict | None:
         if v is None:
             return v
-        # Script-based criteria get validated at creation time
+        # Reject declarative v1.0 criteria
+        if "tests" in v or v.get("version") == "1.0":
+            raise ValueError(
+                "Declarative acceptance criteria (v1.0 'tests' format) are not supported. "
+                "Use script-based verification: provide a 'script' key with a base64-encoded script."
+            )
+        # Validate script-based criteria
         if v.get("script"):
             from app.services.sandbox import validate_script_criteria
             validate_script_criteria(v)
+        elif v:
+            raise ValueError(
+                "acceptance_criteria must contain a 'script' key (base64-encoded verification script)."
+            )
         return v
 
     @field_validator("max_budget")

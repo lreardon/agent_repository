@@ -266,18 +266,16 @@ async def test_withdrawal_then_fund_job_insufficient(client: AsyncClient) -> Non
     job_data = {
         "seller_agent_id": seller_id,
         "max_budget": "50.00",
-        "acceptance_criteria": {"version": "1.0", "tests": []},
+        "acceptance_criteria": None,
     }
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", job_data)
     resp = await client.post("/jobs", json=job_data, headers=headers)
     assert resp.status_code == 201
     job_id = resp.json()["job_id"]
 
-    # Seller accepts (must provide criteria hash)
-    _criteria = {"version": "1.0", "tests": []}
-    accept_data = {"acceptance_criteria_hash": hash_criteria(_criteria)}
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
-    resp = await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
+    # Seller accepts (no criteria hash needed)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    resp = await client.post(f"/jobs/{job_id}/accept", headers=headers)
     assert resp.status_code == 200
 
     # Fund should fail — insufficient balance
@@ -299,16 +297,14 @@ async def test_fund_job_then_withdraw_insufficient(client: AsyncClient) -> None:
     job_data = {
         "seller_agent_id": seller_id,
         "max_budget": "80.00",
-        "acceptance_criteria": {"version": "1.0", "tests": []},
+        "acceptance_criteria": None,
     }
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", job_data)
     resp = await client.post("/jobs", json=job_data, headers=headers)
     job_id = resp.json()["job_id"]
 
-    _criteria = {"version": "1.0", "tests": []}
-    accept_data = {"acceptance_criteria_hash": hash_criteria(_criteria)}
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", accept_data)
-    await client.post(f"/jobs/{job_id}/accept", json=accept_data, headers=headers)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    await client.post(f"/jobs/{job_id}/accept", headers=headers)
 
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
     resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)

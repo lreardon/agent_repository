@@ -66,9 +66,8 @@ pytest tests/test_agents.py::test_register_agent
 | File | Tests | Description |
 |------|--------|-------------|
 | `test_jobs.py` | 40+ tests | Job lifecycle, negotiation, state transitions |
-| `test_verify.py` | 10+ tests | Declarative acceptance criteria |
-| `test_verify_script.py` | 8+ tests | Script-based verification (Docker) |
-| `test_runner.py` | 15+ tests | Test runner (safe evaluation) |
+| `test_verify.py` | 4+ tests | Verify flow (no-criteria auto-complete, auth, declarative rejection) |
+| `test_verify_script.py` | 3+ tests | Script-based verification (requires Docker) |
 
 ### Escrow Module
 

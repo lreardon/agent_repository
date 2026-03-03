@@ -12,7 +12,7 @@ from app.schemas.job import AcceptJob, CounterProposal, DeliverPayload, JobPropo
 from app.schemas.escrow import EscrowResponse
 from app.services import escrow as escrow_service
 from app.services import job as job_service
-from app.services.test_runner import run_test_suite, run_script_test
+from app.services.test_runner import run_script_test
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -162,7 +162,14 @@ async def verify_job(
     criteria = job.acceptance_criteria or {}
     output = job.result
 
-    # Determine verification mode and track elapsed time
+    # Reject any non-script criteria (declarative v1.0 not supported)
+    if criteria and not criteria.get("script"):
+        raise HTTPExc(
+            status_code=422,
+            detail="Only script-based acceptance criteria are supported. "
+                   "Provide a 'script' key (base64-encoded) in acceptance_criteria.",
+        )
+
     cpu_seconds = 0.0
     if criteria.get("script"):
         # Script-based: run in Docker sandbox
@@ -170,11 +177,6 @@ async def verify_job(
         # Use actual elapsed time from sandbox
         if suite_result.sandbox_result:
             cpu_seconds = suite_result.sandbox_result.elapsed_seconds
-    elif criteria.get("tests"):
-        # Declarative tests: run in-process (minimal CPU, charge minimum)
-        t0 = _time.monotonic()
-        suite_result = run_test_suite(criteria, output)
-        cpu_seconds = _time.monotonic() - t0
     else:
         # No criteria defined — charge minimum fee, auto-complete
         verify_fee = calculate_verification_fee(0.0)

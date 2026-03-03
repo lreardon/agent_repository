@@ -382,29 +382,7 @@ async def charge_fee(
 
 ## Test Runner Service
 
-### Declarative Tests (In-Process)
-
-```python
-def run_test_suite(criteria: dict, output: Any) -> SuiteResult:
-    # 1. Parse test definitions
-    # 2. Validate each test
-    # 3. Run tests by type
-    # 4. Aggregate results
-    # 5. Check threshold (all/majority/min_pass)
-    # 6. Return SuiteResult
-```
-
-**Test Types:**
-- `json_schema` - Validate against JSON Schema
-- `count_gte` - Array count >= N
-- `count_lte` - Array count <= N
-- `assertion` - Safe Python expression
-- `contains` - Substring or regex match
-- `latency_lte` - Delivery latency check
-- `http_status` - HTTP response code check
-- `checksum` - SHA-256 hash match
-
-### Script Tests (Docker Sandbox)
+All verification is script-based, running in an isolated Docker sandbox.
 
 ```python
 async def run_script_test(
@@ -414,7 +392,7 @@ async def run_script_test(
     # 1. Validate script criteria
     # 2. Decode base64 script
     # 3. Call sandbox_service
-    # 4. Get SandboxResult
+    # 4. Get SandboxResult (exit code, stdout, stderr, elapsed_seconds)
     # 5. Create TestResult from exit code
     # 6. Return SuiteResult
 ```

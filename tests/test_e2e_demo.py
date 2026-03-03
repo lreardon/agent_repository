@@ -16,15 +16,24 @@ Flow:
 10. Verify reputation scores updated
 """
 
+import base64
 import json
+import os
+import shutil
 
 import pytest
 from httpx import AsyncClient
 
-from app.utils.crypto import generate_keypair
+from app.utils.crypto import generate_keypair, hash_criteria
 from tests.conftest import make_auth_headers
 
+_docker = pytest.mark.skipif(
+    bool(os.environ.get("CI")) or not shutil.which("docker"),
+    reason="Docker sandbox not available",
+)
 
+
+@_docker
 @pytest.mark.asyncio
 async def test_full_e2e_demo(client: AsyncClient) -> None:
     """Complete marketplace lifecycle with two agents."""
@@ -108,46 +117,18 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
             "fields": ["owner_name", "property_address", "units"],
         },
         "acceptance_criteria": {
-            "version": "1.0",
-            "tests": [
-                {
-                    "test_id": "output_schema",
-                    "type": "json_schema",
-                    "params": {
-                        "schema": {
-                            "type": "object",
-                            "required": ["records"],
-                            "properties": {
-                                "records": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "required": ["owner_name", "property_address"],
-                                        "properties": {
-                                            "owner_name": {"type": "string"},
-                                            "property_address": {"type": "string"},
-                                            "units": {"type": "integer"},
-                                        },
-                                    },
-                                }
-                            },
-                        }
-                    },
-                },
-                {
-                    "test_id": "min_records",
-                    "type": "count_gte",
-                    "params": {"path": "$.records", "min_count": 400},
-                },
-                {
-                    "test_id": "no_nulls",
-                    "type": "assertion",
-                    "params": {
-                        "expression": "all(r['owner_name'] is not None for r in output['records'])"
-                    },
-                },
-            ],
-            "pass_threshold": "all",
+            "script": base64.b64encode(
+                b"import sys, json\n"
+                b"data = json.load(open('/input/result.json'))\n"
+                b"records = data.get('records', [])\n"
+                b"if len(records) >= 400:\n"
+                b"    sys.exit(0)\n"
+                b"else:\n"
+                b"    print(f'Too few records: {len(records)}', file=sys.stderr)\n"
+                b"    sys.exit(1)\n"
+            ).decode(),
+            "runtime": "python:3.13",
+            "timeout_seconds": 30,
         },
         "delivery_deadline": "2026-02-28T00:00:00Z",
         "max_rounds": 5,

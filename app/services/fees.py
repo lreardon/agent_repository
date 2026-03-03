@@ -6,7 +6,7 @@ Fee structure (all configurable via settings):
    Charged at escrow release (job completion).
 
 2. **Verification compute fee** — charged to the client when they trigger /verify.
-   Scales with CPU-seconds consumed by the sandbox. Flat minimum for declarative tests.
+   Scales with CPU-seconds consumed by the sandbox. Minimum applies when no criteria.
 
 3. **Deliverable storage fee** — charged to the seller when they call /deliver.
    Scales with the byte size of the JSON-serialized result.
@@ -46,8 +46,7 @@ class FeeBreakdown:
 def calculate_verification_fee(cpu_seconds: float) -> FeeBreakdown:
     """Calculate the fee for a verification run based on CPU time consumed.
 
-    For declarative (in-process) tests where cpu_seconds is 0 or negligible,
-    the minimum fee applies.
+    The minimum fee applies when cpu_seconds is 0 (no-criteria auto-complete).
     """
     computed = (Decimal(str(cpu_seconds)) * settings.fee_verification_per_cpu_second).quantize(
         Decimal("0.01"), rounding=ROUND_UP,

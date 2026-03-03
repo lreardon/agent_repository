@@ -202,36 +202,3 @@ async def test_script_criteria_validation_on_proposal(client: AsyncClient) -> No
     headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", body_bytes)
     resp = await client.post("/jobs", content=body_bytes, headers={**headers, "Content-Type": "application/json"})
     assert resp.status_code == 422
-
-
-@_docker
-@pytest.mark.asyncio
-async def test_declarative_tests_still_work(client: AsyncClient) -> None:
-    """Original declarative test format still works alongside script-based."""
-    client_id, client_priv = await _create_agent(client)
-    seller_id, seller_priv = await _create_agent(client)
-    await _deposit(client, client_id, client_priv, "500.00")
-    await _deposit(client, seller_id, seller_priv, "10.00")
-
-    # Old-style declarative criteria
-    criteria = {
-        "version": "1.0",
-        "tests": [
-            {"test_id": "has_data", "type": "count_gte", "params": {"path": "$", "min_count": 2}},
-        ],
-        "pass_threshold": "all",
-    }
-
-    job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv, criteria)
-
-    deliver_bytes = json.dumps({"result": [1, 2, 3]}).encode()
-    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_bytes)
-    await client.post(f"/jobs/{job_id}/deliver", content=deliver_bytes, headers={**headers, "Content-Type": "application/json"})
-
-    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/verify", b"")
-    resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["job"]["status"] == "completed"
-    assert data["verification"]["passed"] is True
-    assert "sandbox" not in data["verification"]  # No sandbox for declarative tests
