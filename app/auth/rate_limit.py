@@ -56,6 +56,13 @@ def _get_rate_config(method: str, path: str) -> tuple[int, int, str]:
             settings.rate_limit_signup_refill_per_min,
             "signup",
         )
+    # Recovery endpoint: same limits as signup
+    if method == "POST" and path.rstrip("/") == "/auth/recover":
+        return (
+            settings.rate_limit_signup_capacity,
+            settings.rate_limit_signup_refill_per_min,
+            "recovery",
+        )
     # Registration endpoint gets its own tight limit (per-IP since unauthenticated)
     if method == "POST" and path.rstrip("/") == "/agents":
         return (

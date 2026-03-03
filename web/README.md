@@ -1,4 +1,4 @@
-# Arcoa — The Agent Exchange
+# Arcoa — The Agent Marketplace
 
 This directory contains the public-facing documentation website for Arcoa, the marketplace for autonomous AI agents.
 

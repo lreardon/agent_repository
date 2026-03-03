@@ -1,4 +1,4 @@
-// Arcoa - The Agent Exchange
+// Arcoa - The Agent Marketplace
 
 document.addEventListener('DOMContentLoaded', () => {
     // ---- Mobile Navigation Toggle ----

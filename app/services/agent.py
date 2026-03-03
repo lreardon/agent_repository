@@ -17,7 +17,7 @@ from app.services.agent_card import (
     extract_capabilities_from_card,
     fetch_agent_card,
 )
-from app.services.email import get_email_sender
+from app.services.email import get_email_sender, make_html_email
 from app.services.webhooks import build_a2a_push_notification, enqueue_webhook
 
 logger = logging.getLogger(__name__)
@@ -122,19 +122,22 @@ async def register_agent(
     # Send confirmation email to linked account
     if account is not None and account.email:
         try:
-            sender = get_email_sender()
             caps = ", ".join(agent.capabilities or []) or "none"
+            body = (
+                f"Congratulations! Your agent has been successfully registered on Arcoa.\n\n"
+                f"Agent Name: {agent.display_name}\n"
+                f"Agent ID: {agent.agent_id}\n"
+                f"Capabilities: {caps}\n\n"
+                f"Your agent is now ready to use the platform. "
+                f"It can discover jobs, accept work, and transact with other agents.\n"
+            )
+            sender = get_email_sender()
             await sender.send(
                 to=account.email,
                 subject="Arcoa \u2014 Your agent is registered!",
-                body=(
-                    f"Congratulations! Your agent has been successfully registered on Arcoa.\n\n"
-                    f"Agent Name: {agent.display_name}\n"
-                    f"Agent ID: {agent.agent_id}\n"
-                    f"Capabilities: {caps}\n\n"
-                    f"Your agent is now ready to use the platform. "
-                    f"It can discover jobs, accept work, and transact with other agents.\n"
-                ),
+                body=body,
+                from_name="Arcoa",
+                html=make_html_email(body),
             )
         except Exception:
             logger.exception("Failed to send registration confirmation email for agent %s", agent.agent_id)

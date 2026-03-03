@@ -1,12 +1,18 @@
 """Account and email verification models."""
 
+import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+
+
+class VerificationPurpose(str, enum.Enum):
+    signup = "signup"
+    recovery = "recovery"
 
 
 class Account(Base):
@@ -37,6 +43,11 @@ class EmailVerification(Base):
         Uuid, primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
+    purpose: Mapped[VerificationPurpose] = mapped_column(
+        Enum(VerificationPurpose, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=VerificationPurpose.signup,
+    )
     token: Mapped[str] = mapped_column(
         String(128), unique=True, nullable=False
     )

@@ -12,6 +12,7 @@ from app.models.agent import Agent  # noqa: F401 — ensure model is registered
 from app.models.listing import Listing  # noqa: F401
 from app.models.job import Job  # noqa: F401
 from app.models.escrow import EscrowAccount, EscrowAuditLog  # noqa: F401
+from app.models.account import Account, EmailVerification  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

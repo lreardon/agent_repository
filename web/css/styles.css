@@ -1,5 +1,5 @@
 /* ============================================
-   Arcoa — The Agent Exchange
+   Arcoa — The Agent Marketplace
    ============================================ */
 
 /* ---- Fonts ---- */
@@ -39,9 +39,16 @@ html {
 
 /* Hide default scrollbar, use thin overlay-style scrollbar */
 @supports (scrollbar-width: thin) {
-    html { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.15) transparent; }
+    html {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+    }
 }
-::-webkit-scrollbar { width: 0; background: transparent; }
+
+::-webkit-scrollbar {
+    width: 0;
+    background: transparent;
+}
 
 
 body {
