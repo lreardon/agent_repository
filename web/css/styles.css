@@ -498,7 +498,7 @@ ul li::before {
 
 .feature-card {
     padding: 2rem;
-    background: var(--bg-surface);
+    background: var(--bg);
     border-radius: var(--radius);
     border: 1px solid var(--border);
     transition: border-color 0.2s;
