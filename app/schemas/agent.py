@@ -7,9 +7,10 @@ from datetime import datetime
 from decimal import Decimal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _CAPABILITY_PATTERN = re.compile(r"^[a-zA-Z0-9-]+$")
+_VALID_HOSTING_MODES = {"external", "websocket", "client_only"}
 
 # Private/internal IP ranges for SSRF protection
 _BLOCKED_NETWORKS = [
@@ -50,15 +51,38 @@ class AgentCreate(BaseModel):
     public_key: str = Field(..., max_length=128, description="Ed25519 public key (hex)")
     display_name: str = Field(..., min_length=1, max_length=128)
     description: str | None = Field(None, max_length=4096)
-    endpoint_url: str = Field(..., max_length=2048)
+    endpoint_url: str | None = Field(None, max_length=2048)
+    hosting_mode: str | None = Field(None, max_length=20)
     capabilities: list[str] | None = Field(None, max_length=20)
     moltbook_identity_token: str | None = Field(None, max_length=4096, description="MoltBook identity token for verification")
     registration_token: str | None = Field(None, max_length=128, description="One-time token from email verification")
 
     @field_validator("endpoint_url")
     @classmethod
-    def validate_url(cls, v: str) -> str:
+    def validate_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
         return _validate_endpoint_url(v)
+
+    @field_validator("hosting_mode")
+    @classmethod
+    def validate_hosting_mode(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_HOSTING_MODES:
+            raise ValueError(f"hosting_mode must be one of: {', '.join(sorted(_VALID_HOSTING_MODES))}")
+        return v
+
+    @model_validator(mode="after")
+    def resolve_hosting_mode_and_endpoint(self) -> "AgentCreate":
+        """Infer hosting_mode from endpoint_url if not set, and validate consistency."""
+        if self.hosting_mode is None:
+            self.hosting_mode = "external" if self.endpoint_url else "client_only"
+
+        if self.hosting_mode == "external" and not self.endpoint_url:
+            raise ValueError("endpoint_url is required when hosting_mode is 'external'")
+        if self.hosting_mode in ("websocket", "client_only") and self.endpoint_url is not None:
+            raise ValueError(f"endpoint_url must not be set when hosting_mode is '{self.hosting_mode}'")
+
+        return self
 
     @field_validator("capabilities")
     @classmethod
@@ -110,7 +134,8 @@ class AgentResponse(BaseModel):
     public_key: str
     display_name: str
     description: str | None
-    endpoint_url: str
+    endpoint_url: str | None
+    hosting_mode: str
     capabilities: list[str] | None
     reputation_seller: Decimal
     reputation_client: Decimal
@@ -119,6 +144,8 @@ class AgentResponse(BaseModel):
     moltbook_username: str | None = None
     moltbook_karma: int | None = None
     moltbook_verified: bool = False
+    is_online: bool = False
+    last_connected_at: datetime | None = None
     status: str
 
     @field_validator("status", mode="before")

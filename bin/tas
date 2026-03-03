@@ -1,0 +1,1 @@
+terraform -chdir=$PROJECT_ROOT/infra apply -var-file=$PROJECT_ROOT/infra/staging.tfvars

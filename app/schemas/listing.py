@@ -103,3 +103,4 @@ class DiscoverResult(BaseModel):
     currency: str
     sla: dict | None
     a2a_skill: A2ASkillInfo | None = None
+    is_online: bool = False

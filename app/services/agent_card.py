@@ -73,6 +73,38 @@ def get_skill_ids_from_card(card: dict[str, Any]) -> set[str]:
     return {skill["id"] for skill in card.get("skills", []) if "id" in skill}
 
 
+def generate_platform_agent_card(
+    display_name: str,
+    description: str | None,
+    capabilities: list[str] | None,
+) -> dict[str, Any]:
+    """Generate a minimal A2A Agent Card for agents without their own endpoint.
+
+    Used for websocket and client_only agents who don't serve their own
+    /.well-known/agent.json.
+    """
+    skills = []
+    for cap in (capabilities or []):
+        skills.append({
+            "id": cap,
+            "name": cap,
+            "description": f"Capability: {cap}",
+            "tags": [cap],
+        })
+
+    return {
+        "name": display_name,
+        "description": description or "",
+        "url": "",
+        "version": "1.0.0",
+        "skills": skills,
+        "capabilities": {
+            "pushNotifications": True,
+            "stateTransitionHistory": False,
+        },
+    }
+
+
 class AgentCardError(Exception):
     """Raised when Agent Card fetch or validation fails."""
     pass

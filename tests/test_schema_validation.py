@@ -172,13 +172,16 @@ async def test_agent_create_missing_public_key(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_create_missing_endpoint_url(client: AsyncClient) -> None:
+async def test_agent_create_missing_endpoint_url_defaults_client_only(client: AsyncClient) -> None:
+    """Missing endpoint_url now succeeds — defaults to hosting_mode='client_only'."""
     _, pub = generate_keypair()
     resp = await client.post("/agents", json={
         "public_key": pub,
         "display_name": "Test",
     })
-    assert resp.status_code == 422
+    assert resp.status_code == 201
+    assert resp.json()["hosting_mode"] == "client_only"
+    assert resp.json()["endpoint_url"] is None
 
 
 @pytest.mark.asyncio

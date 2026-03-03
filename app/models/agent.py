@@ -29,7 +29,10 @@ class Agent(Base):
     )
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    endpoint_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    endpoint_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    hosting_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="external"
+    )
     capabilities: Mapped[list[str] | None] = mapped_column(
         ARRAY(String(64)), nullable=True, default=list
     )
@@ -54,6 +57,14 @@ class Agent(Base):
     a2a_agent_card: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     last_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    # Presence
+    is_online: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    last_connected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # MoltBook identity

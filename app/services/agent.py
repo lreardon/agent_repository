@@ -16,6 +16,7 @@ from app.services.agent_card import (
     AgentCardError,
     extract_capabilities_from_card,
     fetch_agent_card,
+    generate_platform_agent_card,
 )
 from app.services.email import get_email_sender, make_html_email
 from app.services.webhooks import build_a2a_push_notification, enqueue_webhook
@@ -55,13 +56,19 @@ async def register_agent(
     a2a_card = None
     capabilities = data.capabilities or []
 
-    if not skip_card_fetch:
-        try:
-            a2a_card = await fetch_agent_card(data.endpoint_url)
-            # Derive capabilities from Agent Card skills tags
-            capabilities = extract_capabilities_from_card(a2a_card)
-        except AgentCardError as e:
-            raise HTTPException(status_code=422, detail=f"Agent Card validation failed: {e}")
+    if data.hosting_mode == "external":
+        # External agents: fetch their Agent Card from endpoint_url
+        if not skip_card_fetch:
+            try:
+                a2a_card = await fetch_agent_card(data.endpoint_url)
+                capabilities = extract_capabilities_from_card(a2a_card)
+            except AgentCardError as e:
+                raise HTTPException(status_code=422, detail=f"Agent Card validation failed: {e}")
+    else:
+        # websocket / client_only: generate a platform agent card
+        a2a_card = generate_platform_agent_card(
+            data.display_name, data.description, data.capabilities,
+        )
 
     # MoltBook identity verification
     moltbook_profile = None
@@ -93,6 +100,7 @@ async def register_agent(
         display_name=data.display_name,
         description=data.description,
         endpoint_url=data.endpoint_url,
+        hosting_mode=data.hosting_mode,
         capabilities=capabilities,
         a2a_agent_card=a2a_card,
         webhook_secret=webhook_secret,

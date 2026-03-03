@@ -44,4 +44,4 @@ memory/
 build/
 .envrc.hash
 
-bin/
+bin/sdk/

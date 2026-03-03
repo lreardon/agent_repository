@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
-from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet
+from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet, ws
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +153,7 @@ app.include_router(fees.router)
 app.include_router(jobs.router)
 app.include_router(reviews.router)
 app.include_router(wallet.router)
+app.include_router(ws.router)
 
 # Static files - serve documentation
 from pathlib import Path

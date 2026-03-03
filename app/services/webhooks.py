@@ -81,19 +81,37 @@ async def enqueue_webhook(
     event_type: str,
     payload: dict,
 ) -> WebhookDelivery:
-    """Create a webhook delivery record. In production, enqueues to Cloud Tasks."""
+    """Create a webhook delivery record.
+
+    Delivery priority:
+    1. If agent is connected via WebSocket → deliver instantly, mark DELIVERED
+    2. If agent has endpoint_url → enqueue webhook as before (PENDING)
+    3. If neither → store as PENDING (agent will receive when they next connect)
+    """
+    from app.services.connection_manager import manager
+
+    # Try WebSocket delivery first
+    ws_delivered = False
+    if manager.is_connected(target_agent_id):
+        ws_delivered = await manager.send_event(target_agent_id, event_type, payload)
+
+    status = WebhookStatus.DELIVERED if ws_delivered else WebhookStatus.PENDING
+
     delivery = WebhookDelivery(
         delivery_id=uuid.uuid4(),
         target_agent_id=target_agent_id,
         event_type=event_type,
         payload=payload,
-        status=WebhookStatus.PENDING,
+        status=status,
     )
     db.add(delivery)
     await db.commit()
     await db.refresh(delivery)
 
-    logger.info(f"A2A push notification enqueued: {event_type} → {target_agent_id}")
+    if ws_delivered:
+        logger.info(f"A2A push notification delivered via WebSocket: {event_type} → {target_agent_id}")
+    else:
+        logger.info(f"A2A push notification enqueued: {event_type} → {target_agent_id}")
     return delivery
 
 

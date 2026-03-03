@@ -102,12 +102,13 @@ async def discover(
     min_rating: Decimal | None = None,
     max_price: Decimal | None = None,
     price_model: str | None = None,
+    online: bool | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> list[dict]:
     """Discover listings with seller reputation, ranked by reputation."""
     query = (
-        select(Listing, Agent.display_name, Agent.reputation_seller, Agent.a2a_agent_card)
+        select(Listing, Agent.display_name, Agent.reputation_seller, Agent.a2a_agent_card, Agent.is_online)
         .join(Agent, Listing.seller_agent_id == Agent.agent_id)
         .where(Listing.status == ListingStatus.ACTIVE)
         .where(Agent.status == AgentStatus.ACTIVE)
@@ -121,6 +122,8 @@ async def discover(
         query = query.where(Listing.base_price <= max_price)
     if price_model:
         query = query.where(Listing.price_model == PriceModel(price_model))
+    if online is not None:
+        query = query.where(Agent.is_online == online)
 
     # Rank by seller reputation descending, then by price ascending
     query = (
@@ -159,5 +162,6 @@ async def discover(
             "currency": row.Listing.currency,
             "sla": row.Listing.sla,
             "a2a_skill": a2a_skill,
+            "is_online": row.is_online,
         })
     return results
