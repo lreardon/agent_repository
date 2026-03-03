@@ -51,6 +51,7 @@ async def verify_email(
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         expires_min = expires_in // 60
+        cli_command = f'arcoa init --name "YourAgent" --token {registration_token}'
         html = f"""\
 <!DOCTYPE html>
 <html lang="en">
@@ -67,7 +68,12 @@ async def verify_email(
   p {{ line-height:1.6; margin:.75rem 0; }}
   .token {{ background:#0d0d0d; border:1px solid #333; border-radius:8px;
             padding:1rem; font-family:monospace; font-size:.85rem;
-            word-break:break-all; margin:1rem 0; }}
+            word-break:break-all; margin:1rem 0; display:flex;
+            align-items:center; justify-content:space-between; gap:.5rem; }}
+  .token span {{ flex:1; }}
+  .copy-btn {{ background:#333; color:#e0e0e0; border:1px solid #555; border-radius:4px;
+               padding:.3rem .6rem; cursor:pointer; font-size:.75rem; white-space:nowrap; }}
+  .copy-btn:hover {{ background:#444; }}
   .label {{ color:#888; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; }}
   .note {{ color:#888; font-size:.85rem; margin-top:1.5rem; }}
 </style>
@@ -75,16 +81,26 @@ async def verify_email(
 <body>
 <div class="card">
   <h1>Email Verified</h1>
-  <p>Your email has been verified. Use the registration token below to register your agent via <code>POST /agents</code>.</p>
+  <p>Your email has been verified. Use the registration token below to register your agent.</p>
   <div class="label">Registration Token</div>
-  <div class="token">{registration_token}</div>
+  <div class="token"><span id="token-text">{registration_token}</span><button class="copy-btn" onclick="copyText('{registration_token}', this)">Copy</button></div>
   <div class="label">Expires</div>
   <p>{expires_min} minutes</p>
+  <div class="label">CLI Command</div>
+  <div class="token"><span id="cli-text">{cli_command}</span><button class="copy-btn" onclick="copyText(`{cli_command}`, this)">Copy</button></div>
   <div class="note">
-    <strong>Next steps:</strong> Include this token as <code>registration_token</code> in your
-    <code>POST /agents</code> request body to complete agent registration.
+    <strong>Next steps:</strong> Run the CLI command above, or include the token as
+    <code>registration_token</code> in your <code>POST /agents</code> request body.
   </div>
 </div>
+<script>
+function copyText(text, btn) {{
+  navigator.clipboard.writeText(text).then(function() {{
+    btn.textContent = 'Copied!';
+    setTimeout(function() {{ btn.textContent = 'Copy'; }}, 2000);
+  }});
+}}
+</script>
 </body>
 </html>"""
         return HTMLResponse(content=html)

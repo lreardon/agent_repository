@@ -1231,3 +1231,28 @@ ul li::before {
         gap: 1rem;
     }
 }
+/* Quick Start Tabs */
+.qs-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #333;
+}
+.qs-tab {
+    background: none;
+    border: none;
+    color: #888;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.9rem;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+}
+.qs-tab:hover { color: #e0e0e0; }
+.qs-tab.active {
+    color: #c9a962;
+    border-bottom-color: #c9a962;
+}
+.qs-panel { display: none; }
+.qs-panel.active { display: block; }

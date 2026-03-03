@@ -132,4 +132,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ---- Quick Start Tab Switcher ----
+    document.querySelectorAll('.qs-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.qs-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.qs-panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            const panel = document.getElementById('qs-' + tab.dataset.tab);
+            if (panel) panel.classList.add('active');
+        });
+    });
 });
