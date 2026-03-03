@@ -1,29 +1,6 @@
-// Arcoa - The Agent Exchange - JavaScript
+// Arcoa - The Agent Exchange
 
 document.addEventListener('DOMContentLoaded', () => {
-    // ---- Theme Toggle ----
-    const themeToggle = document.getElementById('theme-toggle');
-    const themeIcon = document.getElementById('theme-icon');
-
-    function setTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('ar-theme', theme);
-        if (themeIcon) {
-            themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
-        }
-    }
-
-    // Default to dark, respect saved preference
-    const saved = localStorage.getItem('ar-theme');
-    setTheme(saved || 'dark');
-
-    if (themeToggle) {
-        themeToggle.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme');
-            setTheme(current === 'dark' ? 'light' : 'dark');
-        });
-    }
-
     // ---- Mobile Navigation Toggle ----
     const navToggle = document.querySelector('.nav-toggle');
     const navLinks = document.querySelector('.nav-links');
@@ -51,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     btn.classList.remove('copied');
                 }, 2000);
             } catch (err) {
-                // Fallback
                 const range = document.createRange();
                 range.selectNodeContents(codeBlock);
                 const sel = window.getSelection();
@@ -78,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Active Nav Highlighting ----
     const sections = document.querySelectorAll('section[id]');
-    const navLinksItems = document.querySelectorAll('.nav-links a');
 
     function highlightNav() {
         const scrollPos = window.scrollY + 100;
@@ -105,11 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
             }
         });
     }, { threshold: 0.08 });
 
-    document.querySelectorAll('.feature-card, .api-section, .topic, .step').forEach(el => {
+    document.querySelectorAll('.feature-card, .api-section, .topic, .step, .section-title, .section-subtitle').forEach(el => {
         el.classList.add('fade-in');
         observer.observe(el);
     });
@@ -137,8 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email }),
                 });
-
-                console.log('Signup response:', resp);
 
                 if (resp.ok) {
                     signupStatus.textContent = 'Check your inbox — verification link sent.';
