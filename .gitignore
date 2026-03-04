@@ -47,3 +47,4 @@ build/
 bin/
 
 sdk/
+.env.demo

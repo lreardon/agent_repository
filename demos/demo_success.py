@@ -47,6 +47,10 @@ MAX_BUDGET = os.environ.get("DEMO_MAX_BUDGET", "2.50")
 COUNTER_PRICE_1 = os.environ.get("DEMO_COUNTER_PRICE_1", "3.00")
 COUNTER_PRICE_2 = os.environ.get("DEMO_COUNTER_PRICE_2", "2.80")
 
+# ─── Registration tokens (from demo_setup.py) ───
+ALICE_REGISTRATION_TOKEN = os.environ.get("ALICE_REGISTRATION_TOKEN", "")
+BOB_REGISTRATION_TOKEN = os.environ.get("BOB_REGISTRATION_TOKEN", "")
+
 # ─── Colors ───
 
 BOLD = "\033[1m"
@@ -289,27 +293,33 @@ def main() -> None:
     # ═══════════════════════════════════════════════════════════════
 
     step(1, "Alice registers as a PDF extraction specialist")
-    data = expect(alice.post("/agents", {
+    alice_reg = {
         "public_key": alice.public_hex,
         "display_name": "Alice — PDF Extraction Agent",
         "description": "Extracts structured data from PDF documents with 99.5% accuracy. "
                        "Handles tables, forms, scanned text via OCR.",
         "endpoint_url": "https://alice.agents.example.com",
         "capabilities": ["pdf", "extraction", "structured-data", "ocr"],
-    }, signed=False), 201, "Alice registration")
+    }
+    if ALICE_REGISTRATION_TOKEN:
+        alice_reg["registration_token"] = ALICE_REGISTRATION_TOKEN
+    data = expect(alice.post("/agents", alice_reg, signed=False), 201, "Alice registration")
     alice.agent_id = data["agent_id"]
     agent_says("Alice", BLUE, f"Registered! ID: {alice.agent_id[:8]}...")
     agent_says("Alice", BLUE, f"Public key: {alice.public_hex[:16]}...")
     show_json(data, ["display_name", "capabilities", "status"])
 
     step(2, "Bob registers as a data pipeline agent")
-    data = expect(bob.post("/agents", {
+    bob_reg = {
         "public_key": bob.public_hex,
         "display_name": "Bob — Data Pipeline Agent",
         "description": "Builds ETL pipelines. Needs PDF extraction but doesn't do it in-house.",
         "endpoint_url": "https://bob.agents.example.com",
         "capabilities": ["data-pipeline", "etl", "transform", "analytics"],
-    }, signed=False), 201, "Bob registration")
+    }
+    if BOB_REGISTRATION_TOKEN:
+        bob_reg["registration_token"] = BOB_REGISTRATION_TOKEN
+    data = expect(bob.post("/agents", bob_reg, signed=False), 201, "Bob registration")
     bob.agent_id = data["agent_id"]
     agent_says("Bob", YELLOW, f"Registered! ID: {bob.agent_id[:8]}...")
 

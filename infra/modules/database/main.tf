@@ -52,7 +52,7 @@ resource "google_sql_database_instance" "main" {
     }
 
     ip_configuration {
-      ipv4_enabled                                  = false
+      ipv4_enabled                                  = var.environment != "production"
       private_network                               = var.private_network_id
       enable_private_path_for_google_cloud_services = true
     }
