@@ -53,14 +53,27 @@ async def propose_job(
 ) -> Job:
     """Client proposes a new job to a seller."""
     # Verify both agents exist and are active
+    client_agent: Agent | None = None
     for aid in (client_agent_id, data.seller_agent_id):
         result = await db.execute(select(Agent).where(Agent.agent_id == aid))
         agent = result.scalar_one_or_none()
         if agent is None or agent.status != AgentStatus.ACTIVE:
             raise HTTPException(status_code=404, detail=f"Agent {aid} not found or not active")
+        if aid == client_agent_id:
+            client_agent = agent
 
     if client_agent_id == data.seller_agent_id:
         raise HTTPException(status_code=422, detail="Cannot propose a job to yourself")
+
+    # Require minimum balance to propose a job (anti-spam / skin-in-the-game)
+    from app.config import settings as _settings
+    min_balance = _settings.min_balance_to_propose_job
+    if client_agent.balance < min_balance:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Minimum balance of ${min_balance} required to propose a job. "
+                   f"Current balance: ${client_agent.balance}. Deposit funds via /wallet/deposit-address.",
+        )
 
     criteria_hash = hash_criteria(data.acceptance_criteria)
 

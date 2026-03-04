@@ -8,6 +8,7 @@ once per session and each test runs inside a rolled-back transaction (fast).
 import asyncio
 import json
 from collections.abc import AsyncGenerator
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -132,6 +133,7 @@ def _isolate_settings() -> None:
     original = settings.model_dump()
     object.__setattr__(settings, "dev_deposit_enabled", True)
     object.__setattr__(settings, "email_verification_required", False)
+    object.__setattr__(settings, "min_balance_to_propose_job", Decimal("0.00"))
     yield  # type: ignore[misc]
     for key, value in original.items():
         object.__setattr__(settings, key, value)

@@ -3,7 +3,9 @@
 import logging
 import secrets
 import uuid
+from functools import lru_cache
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -15,6 +17,32 @@ from app.models.agent import Agent
 from app.services.email import get_email_sender, make_html_email
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _load_disposable_domains() -> frozenset[str]:
+    """Load the disposable email domain blocklist (cached)."""
+    blocklist_path = Path(__file__).parent.parent / "data" / "disposable_domains.txt"
+    if not blocklist_path.exists():
+        logger.warning("Disposable domain blocklist not found at %s", blocklist_path)
+        return frozenset()
+    domains = set()
+    for line in blocklist_path.read_text().splitlines():
+        line = line.strip().lower()
+        if line and not line.startswith("#"):
+            domains.add(line)
+    logger.info("Loaded %d disposable email domains", len(domains))
+    return frozenset(domains)
+
+
+def _check_disposable_email(email: str) -> None:
+    """Reject emails from known disposable/temporary email providers."""
+    domain = email.rsplit("@", 1)[-1].lower()
+    if domain in _load_disposable_domains():
+        raise HTTPException(
+            status_code=422,
+            detail="Disposable email addresses are not allowed. Please use a permanent email.",
+        )
 
 # Verification email link expires in 24 hours
 VERIFICATION_EXPIRY = timedelta(hours=24)
@@ -29,6 +57,7 @@ async def request_signup(db: AsyncSession, email: str) -> None:
     If the account already has a linked agent, rejects with 409.
     """
     email = email.strip().lower()
+    _check_disposable_email(email)
 
     # Check if account exists with an active agent
     result = await db.execute(

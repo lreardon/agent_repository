@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     rate_limit_signup_capacity: int = 1
     rate_limit_signup_refill_per_min: int = 1
 
+    # Minimum balance required to propose a job (anti-spam / skin-in-the-game)
+    min_balance_to_propose_job: Decimal = Decimal("1.00")
+
     # A2A
     require_agent_card: bool = True  # Set False in tests to skip Agent Card fetch
 
@@ -109,7 +112,7 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
 
     # Email verification
-    email_verification_required: bool = False  # Set True in production to gate registration
+    email_verification_required: bool = True  # Require verified email to register an agent
 
     # CORS — set via CORS_ALLOWED_ORIGINS env var
     # Accepts JSON array or comma-separated string

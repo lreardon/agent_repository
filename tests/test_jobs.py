@@ -77,6 +77,33 @@ async def test_propose_job(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_propose_job_requires_minimum_balance(client: AsyncClient) -> None:
+    """Proposing a job should fail when client balance is below the minimum."""
+    from decimal import Decimal
+    from app.config import settings
+
+    client_id, client_priv = await _create_agent(client)
+    seller_id, _ = await _create_agent(client)
+
+    # Set minimum balance requirement
+    object.__setattr__(settings, "min_balance_to_propose_job", Decimal("1.00"))
+
+    data = {
+        "seller_agent_id": seller_id,
+        "max_budget": "50.00",
+        "acceptance_criteria": _DEFAULT_CRITERIA,
+        "requirements": {"input": "test"},
+    }
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 403
+    assert "Minimum balance" in resp.json()["detail"]
+
+    # Reset for other tests
+    object.__setattr__(settings, "min_balance_to_propose_job", Decimal("0.00"))
+
+
+@pytest.mark.asyncio
 async def test_propose_job_to_self(client: AsyncClient) -> None:
     agent_id, priv = await _create_agent(client)
     data = {

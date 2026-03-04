@@ -302,6 +302,32 @@ async def test_registration_token_cannot_be_reused(client_with_email_required):
 
 
 @pytest.mark.asyncio
+async def test_signup_rejects_disposable_email(client_with_email_required):
+    """POST /auth/signup should reject disposable email domains."""
+    client, _ = client_with_email_required
+    resp = await client.post(
+        "/auth/signup",
+        json={"email": "test@0-mail.com"},  # 0-mail.com is in the blocklist
+    )
+    assert resp.status_code == 422
+    assert "Disposable email" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_signup_accepts_normal_email(client_with_email_required):
+    """POST /auth/signup should accept legitimate email domains."""
+    client, _ = client_with_email_required
+    with patch("app.services.account.get_email_sender") as mock_sender:
+        mock_sender.return_value = AsyncMock()
+        mock_sender.return_value.send = AsyncMock()
+        resp = await client.post(
+            "/auth/signup",
+            json={"email": "agent@example.com"},
+        )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_register_works_without_email_when_not_required(client):
     """When email_verification_required=False, registration works as before (no token needed)."""
     # client fixture from conftest.py has email_verification_required=False (default)
