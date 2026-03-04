@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
+from app.schemas.pagination import PaginatedResponse
 from app.schemas.review import ReviewCreate, ReviewResponse
 from app.services import review as review_service
 
@@ -28,7 +29,7 @@ async def submit_review(
 
 @router.get(
     "/agents/{agent_id}/reviews",
-    response_model=list[ReviewResponse],
+    response_model=PaginatedResponse[ReviewResponse],
     dependencies=[Depends(check_rate_limit)],
 )
 async def get_agent_reviews(
@@ -36,10 +37,15 @@ async def get_agent_reviews(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-) -> list[ReviewResponse]:
+) -> PaginatedResponse[ReviewResponse]:
     """Get reviews for an agent."""
-    reviews = await review_service.get_reviews_for_agent(db, agent_id, limit, offset)
-    return [ReviewResponse.model_validate(r) for r in reviews]
+    reviews, total = await review_service.get_reviews_for_agent(db, agent_id, limit, offset)
+    return PaginatedResponse(
+        items=[ReviewResponse.model_validate(r) for r in reviews],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(

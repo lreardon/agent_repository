@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
 from app.schemas.listing import DiscoverResult
+from app.schemas.pagination import PaginatedResponse
 from app.services import listing as listing_service
 
 router = APIRouter(tags=["discovery"])
@@ -15,7 +16,7 @@ router = APIRouter(tags=["discovery"])
 
 @router.get(
     "/discover",
-    response_model=list[DiscoverResult],
+    response_model=PaginatedResponse[DiscoverResult],
     dependencies=[Depends(check_rate_limit)],
 )
 async def discover(
@@ -27,9 +28,9 @@ async def discover(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-) -> list[DiscoverResult]:
+) -> PaginatedResponse[DiscoverResult]:
     """Discover listings ranked by seller reputation with filters."""
-    results = await listing_service.discover(
+    results, total = await listing_service.discover(
         db,
         skill_id=skill_id,
         min_rating=min_rating,
@@ -39,4 +40,9 @@ async def discover(
         limit=limit,
         offset=offset,
     )
-    return [DiscoverResult(**r) for r in results]
+    return PaginatedResponse(
+        items=[DiscoverResult(**r) for r in results],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

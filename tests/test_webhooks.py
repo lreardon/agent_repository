@@ -1,12 +1,16 @@
-"""Tests for webhook/push notification service."""
+"""Tests for webhook/push notification service and redelivery endpoints."""
 
 import hashlib
 import hmac
+import json
 import uuid
 
 import pytest
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.agent import Agent
+from app.models.webhook import WebhookDelivery, WebhookStatus
 from app.services.webhooks import (
     build_a2a_push_notification,
     enqueue_webhook,
@@ -14,6 +18,8 @@ from app.services.webhooks import (
     sign_webhook_payload,
     _EVENT_STATE_MAP,
 )
+from tests.conftest import make_agent_data, make_auth_headers
+from app.utils.crypto import generate_keypair
 
 
 def test_sign_webhook_payload() -> None:
@@ -164,3 +170,294 @@ def test_event_state_map_working_states() -> None:
     assert _EVENT_STATE_MAP["job.delivered"] == "working"
     assert _EVENT_STATE_MAP["job.completed"] == "completed"
     assert _EVENT_STATE_MAP["job.failed"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Helper: create agent directly in DB and return (agent_id_str, private_key)
+# ---------------------------------------------------------------------------
+
+async def _create_agent(db_session: AsyncSession) -> tuple[str, str]:
+    """Create an agent directly in DB, returning (agent_id_str, private_key_hex)."""
+    private_key, public_key = generate_keypair()
+    agent = Agent(
+        agent_id=uuid.uuid4(),
+        public_key=public_key,
+        display_name="Test Agent",
+        endpoint_url="https://example.com/webhook",
+        webhook_secret="s" * 64,
+    )
+    db_session.add(agent)
+    await db_session.commit()
+    await db_session.refresh(agent)
+    return str(agent.agent_id), private_key
+
+
+async def _create_delivery(
+    db_session: AsyncSession,
+    agent_id: uuid.UUID,
+    event_type: str = "job.proposed",
+    status: WebhookStatus = WebhookStatus.PENDING,
+) -> WebhookDelivery:
+    """Insert a WebhookDelivery directly into the DB."""
+    delivery = WebhookDelivery(
+        delivery_id=uuid.uuid4(),
+        target_agent_id=agent_id,
+        event_type=event_type,
+        payload={"test": True},
+        status=status,
+        attempts=3 if status == WebhookStatus.FAILED else 0,
+        last_error="timeout" if status == WebhookStatus.FAILED else None,
+    )
+    db_session.add(delivery)
+    await db_session.commit()
+    await db_session.refresh(delivery)
+    return delivery
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /agents/{agent_id}/webhooks — list deliveries
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_deliveries_empty(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Listing webhooks for an agent with no deliveries returns empty list."""
+    agent_id, private_key = await _create_agent(db_session)
+    path = f"/agents/{agent_id}/webhooks"
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_deliveries_with_data(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Listing webhooks returns delivery records for the agent."""
+    agent_id, private_key = await _create_agent(db_session)
+    agent_uuid = uuid.UUID(agent_id)
+
+    # Create deliveries with different statuses
+    await _create_delivery(db_session, agent_uuid, "job.proposed", WebhookStatus.PENDING)
+    await _create_delivery(db_session, agent_uuid, "job.started", WebhookStatus.DELIVERED)
+    await _create_delivery(db_session, agent_uuid, "job.failed", WebhookStatus.FAILED)
+
+    path = f"/agents/{agent_id}/webhooks"
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers)
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 3
+
+    # Verify fields are present
+    for item in items:
+        assert "delivery_id" in item
+        assert "event_type" in item
+        assert "status" in item
+        assert "attempts" in item
+        assert "created_at" in item
+        assert "last_error" in item
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_deliveries_filtered_by_status(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Filtering by status returns only matching deliveries."""
+    agent_id, private_key = await _create_agent(db_session)
+    agent_uuid = uuid.UUID(agent_id)
+
+    await _create_delivery(db_session, agent_uuid, "job.proposed", WebhookStatus.PENDING)
+    await _create_delivery(db_session, agent_uuid, "job.started", WebhookStatus.DELIVERED)
+    await _create_delivery(db_session, agent_uuid, "job.failed", WebhookStatus.FAILED)
+
+    # Filter by failed
+    path = f"/agents/{agent_id}/webhooks"
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers, params={"status": "failed"})
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    assert items[0]["status"] == "failed"
+
+    # Filter by pending
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers, params={"status": "pending"})
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 1
+    assert items[0]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_deliveries_invalid_status(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Invalid status filter returns 400."""
+    agent_id, private_key = await _create_agent(db_session)
+    path = f"/agents/{agent_id}/webhooks"
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers, params={"status": "bogus"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_list_webhook_deliveries_pagination(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Limit and offset work correctly."""
+    agent_id, private_key = await _create_agent(db_session)
+    agent_uuid = uuid.UUID(agent_id)
+
+    for i in range(5):
+        await _create_delivery(db_session, agent_uuid, f"job.event{i}", WebhookStatus.PENDING)
+
+    path = f"/agents/{agent_id}/webhooks"
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers, params={"limit": 2, "offset": 0})
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+    headers = make_auth_headers(agent_id, private_key, "GET", path)
+    resp = await client.get(path, headers=headers, params={"limit": 2, "offset": 4})
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: POST /agents/{agent_id}/webhooks/{delivery_id}/redeliver
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_redeliver_failed_webhook(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Redelivering a FAILED webhook resets it to PENDING."""
+    agent_id, private_key = await _create_agent(db_session)
+    agent_uuid = uuid.UUID(agent_id)
+
+    delivery = await _create_delivery(db_session, agent_uuid, "job.proposed", WebhookStatus.FAILED)
+
+    path = f"/agents/{agent_id}/webhooks/{delivery.delivery_id}/redeliver"
+    headers = make_auth_headers(agent_id, private_key, "POST", path)
+    resp = await client.post(path, headers=headers)
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["status"] == "pending"
+    assert body["attempts"] == 0
+    assert body["last_error"] is None
+    assert body["delivery_id"] == str(delivery.delivery_id)
+
+
+@pytest.mark.asyncio
+async def test_redeliver_delivered_webhook(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Redelivering a DELIVERED webhook also resets to PENDING."""
+    agent_id, private_key = await _create_agent(db_session)
+    agent_uuid = uuid.UUID(agent_id)
+
+    delivery = await _create_delivery(db_session, agent_uuid, "job.started", WebhookStatus.DELIVERED)
+
+    path = f"/agents/{agent_id}/webhooks/{delivery.delivery_id}/redeliver"
+    headers = make_auth_headers(agent_id, private_key, "POST", path)
+    resp = await client.post(path, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_redeliver_already_pending_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Redelivering an already PENDING webhook returns 409 Conflict."""
+    agent_id, private_key = await _create_agent(db_session)
+    agent_uuid = uuid.UUID(agent_id)
+
+    delivery = await _create_delivery(db_session, agent_uuid, "job.proposed", WebhookStatus.PENDING)
+
+    path = f"/agents/{agent_id}/webhooks/{delivery.delivery_id}/redeliver"
+    headers = make_auth_headers(agent_id, private_key, "POST", path)
+    resp = await client.post(path, headers=headers)
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_redeliver_wrong_agent_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Redelivering a delivery that belongs to another agent returns 404."""
+    agent_id_a, pk_a = await _create_agent(db_session)
+    agent_id_b, pk_b = await _create_agent(db_session)
+
+    # Create delivery for agent A
+    delivery = await _create_delivery(
+        db_session, uuid.UUID(agent_id_a), "job.proposed", WebhookStatus.FAILED
+    )
+
+    # Agent B tries to redeliver agent A's delivery
+    path = f"/agents/{agent_id_b}/webhooks/{delivery.delivery_id}/redeliver"
+    headers = make_auth_headers(agent_id_b, pk_b, "POST", path)
+    resp = await client.post(path, headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_redeliver_nonexistent_delivery_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Redelivering a nonexistent delivery_id returns 404."""
+    agent_id, private_key = await _create_agent(db_session)
+    fake_delivery_id = uuid.uuid4()
+
+    path = f"/agents/{agent_id}/webhooks/{fake_delivery_id}/redeliver"
+    headers = make_auth_headers(agent_id, private_key, "POST", path)
+    resp = await client.post(path, headers=headers)
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Tests: Signature generation and verification
+# ---------------------------------------------------------------------------
+
+
+def test_sign_webhook_payload_verification_roundtrip() -> None:
+    """Signature can be verified by recomputing with the same inputs."""
+    secret = "my-agent-webhook-secret"
+    timestamp = "2026-03-01T12:00:00+00:00"
+    body = '{"jsonrpc":"2.0","method":"tasks/pushNotification","params":{}}'
+
+    signature = sign_webhook_payload(secret, timestamp, body)
+
+    # Verify by recomputing
+    message = f"{timestamp}.{body}"
+    expected = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+    assert hmac.compare_digest(signature, expected)
+
+
+def test_sign_webhook_payload_tampered_body() -> None:
+    """Changing the body invalidates the signature."""
+    secret = "secret"
+    timestamp = "2026-01-01T00:00:00Z"
+    body = '{"event":"job.proposed"}'
+    sig = sign_webhook_payload(secret, timestamp, body)
+
+    # Tamper with the body
+    tampered_body = '{"event":"job.completed"}'
+    tampered_message = f"{timestamp}.{tampered_body}"
+    tampered_sig = hmac.new(secret.encode(), tampered_message.encode(), hashlib.sha256).hexdigest()
+    assert sig != tampered_sig
+
+
+def test_sign_webhook_payload_tampered_timestamp() -> None:
+    """Changing the timestamp invalidates the signature."""
+    secret = "secret"
+    body = '{"data":true}'
+    sig1 = sign_webhook_payload(secret, "2026-01-01T00:00:00Z", body)
+    sig2 = sign_webhook_payload(secret, "2026-01-01T00:00:01Z", body)
+    assert sig1 != sig2

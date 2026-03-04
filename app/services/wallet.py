@@ -246,7 +246,9 @@ async def request_withdrawal(
     )
 
     # Process immediately in the background
-    asyncio.create_task(_process_withdrawal(withdrawal.withdrawal_id))
+    from app.services.task_registry import registry
+    task = asyncio.create_task(_process_withdrawal(withdrawal.withdrawal_id))
+    registry.register(task, f"withdrawal-{withdrawal.withdrawal_id}")
 
     return withdrawal
 
@@ -512,24 +514,40 @@ async def _wait_and_credit_deposit(deposit_tx_id: uuid.UUID, block_number: int) 
 
 
 async def get_deposit_history(
-    db: AsyncSession, agent_id: uuid.UUID
-) -> list[DepositTransaction]:
+    db: AsyncSession, agent_id: uuid.UUID, limit: int = 20, offset: int = 0
+) -> tuple[list[DepositTransaction], int]:
+    count_result = await db.execute(
+        select(func.count()).select_from(DepositTransaction).where(
+            DepositTransaction.agent_id == agent_id
+        )
+    )
+    total = count_result.scalar() or 0
+
     result = await db.execute(
         select(DepositTransaction)
         .where(DepositTransaction.agent_id == agent_id)
         .order_by(DepositTransaction.detected_at.desc())
-        .limit(100)
+        .limit(limit)
+        .offset(offset)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total
 
 
 async def get_withdrawal_history(
-    db: AsyncSession, agent_id: uuid.UUID
-) -> list[WithdrawalRequest]:
+    db: AsyncSession, agent_id: uuid.UUID, limit: int = 20, offset: int = 0
+) -> tuple[list[WithdrawalRequest], int]:
+    count_result = await db.execute(
+        select(func.count()).select_from(WithdrawalRequest).where(
+            WithdrawalRequest.agent_id == agent_id
+        )
+    )
+    total = count_result.scalar() or 0
+
     result = await db.execute(
         select(WithdrawalRequest)
         .where(WithdrawalRequest.agent_id == agent_id)
         .order_by(WithdrawalRequest.requested_at.desc())
-        .limit(100)
+        .limit(limit)
+        .offset(offset)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total

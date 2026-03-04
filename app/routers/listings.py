@@ -9,6 +9,7 @@ from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
 from app.schemas.listing import ListingCreate, ListingResponse, ListingUpdate
+from app.schemas.pagination import PaginatedResponse
 from app.services import listing as listing_service
 
 router = APIRouter(tags=["listings"])
@@ -61,7 +62,7 @@ async def update_listing(
 
 @router.get(
     "/listings",
-    response_model=list[ListingResponse],
+    response_model=PaginatedResponse[ListingResponse],
     dependencies=[Depends(check_rate_limit)],
 )
 async def browse_listings(
@@ -69,7 +70,12 @@ async def browse_listings(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-) -> list[ListingResponse]:
+) -> PaginatedResponse[ListingResponse]:
     """Browse active listings."""
-    listings = await listing_service.browse_listings(db, skill_id, limit, offset)
-    return [ListingResponse.model_validate(l) for l in listings]
+    listings, total = await listing_service.browse_listings(db, skill_id, limit, offset)
+    return PaginatedResponse(
+        items=[ListingResponse.model_validate(l) for l in listings],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

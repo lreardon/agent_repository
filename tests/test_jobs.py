@@ -449,6 +449,22 @@ async def test_deliver_job(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_deliver_rejects_oversized_payload(client: AsyncClient) -> None:
+    """Deliverables larger than 512KB should be rejected with 422."""
+    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    # Build a payload over 512KB
+    big_result = {"result": {"data": "x" * (513 * 1024)}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", big_result)
+    resp = await client.post(f"/jobs/{job_id}/deliver", json=big_result, headers=headers)
+    assert resp.status_code == 422
+    assert "too large" in resp.json()["detail"][0]["msg"].lower()
+
+
+@pytest.mark.asyncio
 async def test_non_seller_cannot_deliver(client: AsyncClient) -> None:
     """J5: Non-seller cannot deliver (403)."""
     job_id, client_id, client_priv, seller_id, seller_priv = await _get_funded_job(client)

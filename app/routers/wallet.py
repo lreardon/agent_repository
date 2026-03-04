@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.middleware import AuthenticatedAgent, verify_request
@@ -67,11 +67,13 @@ async def notify_deposit(
 
     # Spawn confirmation watcher if not already credited
     if deposit_tx.status.value != "credited":
-        asyncio.create_task(
+        from app.services.task_registry import registry
+        task = asyncio.create_task(
             wallet_service._wait_and_credit_deposit(
                 deposit_tx.deposit_tx_id, deposit_tx.block_number,
             )
         )
+        registry.register(task, f"deposit-confirm-{deposit_tx.deposit_tx_id}")
 
     return DepositNotifyResponse(
         deposit_tx_id=deposit_tx.deposit_tx_id,
@@ -101,13 +103,15 @@ async def request_withdrawal(
 @router.get("/transactions", response_model=TransactionHistoryResponse, dependencies=[Depends(check_rate_limit)])
 async def get_transactions(
     agent_id: uuid.UUID,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> TransactionHistoryResponse:
     """Get deposit and withdrawal history."""
     _assert_own_agent(auth, agent_id)
-    deposits = await wallet_service.get_deposit_history(db, agent_id)
-    withdrawals = await wallet_service.get_withdrawal_history(db, agent_id)
+    deposits, _ = await wallet_service.get_deposit_history(db, agent_id, limit, offset)
+    withdrawals, _ = await wallet_service.get_withdrawal_history(db, agent_id, limit, offset)
     return TransactionHistoryResponse(
         deposits=[DepositTransactionResponse.model_validate(d) for d in deposits],
         withdrawals=[WithdrawalResponse.model_validate(w) for w in withdrawals],

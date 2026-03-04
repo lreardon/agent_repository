@@ -194,8 +194,8 @@ async def test_get_agent_reviews(client: AsyncClient) -> None:
 
     resp = await client.get(f"/agents/{seller_id}/reviews")
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
-    assert resp.json()[0]["rating"] == 5
+    assert resp.json()["total"] == 1
+    assert resp.json()["items"][0]["rating"] == 5
 
 
 @pytest.mark.asyncio
@@ -336,7 +336,7 @@ async def test_get_agent_reviews_pagination(client: AsyncClient) -> None:
 
     resp = await client.get(f"/agents/{seller_id}/reviews?limit=1&offset=0")
     assert resp.status_code == 200
-    assert len(resp.json()) <= 1
+    assert resp.json()["total"] <= 1
 
 
 def test_recency_weight_recent() -> None:

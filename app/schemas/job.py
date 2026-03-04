@@ -87,8 +87,25 @@ class AcceptJob(BaseModel):
 
 
 class DeliverPayload(BaseModel):
-    """Seller delivers result."""
+    """Seller delivers result.
+
+    Maximum serialized size: 512KB. Larger payloads should use
+    external storage and pass a reference URL in the result.
+    """
     result: dict | list
+
+    @model_validator(mode="after")
+    def validate_result_size(self) -> "DeliverPayload":
+        import json
+        serialized = json.dumps(self.result, separators=(",", ":"))
+        max_bytes = 512 * 1024  # 512KB
+        if len(serialized.encode()) > max_bytes:
+            raise ValueError(
+                f"Deliverable too large ({len(serialized.encode()):,} bytes). "
+                f"Maximum is {max_bytes:,} bytes (512KB). "
+                "Use external storage and pass a reference URL instead."
+            )
+        return self
 
 
 class JobResponse(BaseModel):

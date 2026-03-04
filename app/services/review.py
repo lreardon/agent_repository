@@ -184,8 +184,15 @@ async def get_reputation(
 
 async def get_reviews_for_agent(
     db: AsyncSession, agent_id: uuid.UUID, limit: int = 20, offset: int = 0
-) -> list[Review]:
+) -> tuple[list[Review], int]:
     """Get reviews where agent is the reviewee."""
+    count_result = await db.execute(
+        select(func.count()).select_from(Review).where(
+            Review.reviewee_agent_id == agent_id
+        )
+    )
+    total = count_result.scalar() or 0
+
     result = await db.execute(
         select(Review)
         .where(Review.reviewee_agent_id == agent_id)
@@ -193,7 +200,7 @@ async def get_reviews_for_agent(
         .limit(limit)
         .offset(offset)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total
 
 
 async def get_reviews_for_job(db: AsyncSession, job_id: uuid.UUID) -> list[Review]:

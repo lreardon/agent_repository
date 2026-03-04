@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent, AgentStatus
@@ -86,14 +86,20 @@ async def browse_listings(
     skill_id: str | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> list[Listing]:
+) -> tuple[list[Listing], int]:
     """Browse active listings, optionally filtered by skill_id."""
-    query = select(Listing).where(Listing.status == ListingStatus.ACTIVE)
+    base = select(Listing).where(Listing.status == ListingStatus.ACTIVE)
     if skill_id:
-        query = query.where(Listing.skill_id.ilike(f"%{skill_id}%"))
-    query = query.order_by(Listing.created_at.desc()).limit(limit).offset(offset)
+        base = base.where(Listing.skill_id.ilike(f"%{skill_id}%"))
+
+    count_result = await db.execute(
+        select(func.count()).select_from(base.subquery())
+    )
+    total = count_result.scalar() or 0
+
+    query = base.order_by(Listing.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(query)
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total
 
 
 async def discover(
@@ -105,9 +111,9 @@ async def discover(
     online: bool | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> list[dict]:
+) -> tuple[list[dict], int]:
     """Discover listings with seller reputation, ranked by reputation."""
-    query = (
+    base = (
         select(Listing, Agent.display_name, Agent.reputation_seller, Agent.a2a_agent_card, Agent.is_online)
         .join(Agent, Listing.seller_agent_id == Agent.agent_id)
         .where(Listing.status == ListingStatus.ACTIVE)
@@ -115,19 +121,26 @@ async def discover(
     )
 
     if skill_id:
-        query = query.where(Listing.skill_id.ilike(f"%{skill_id}%"))
+        base = base.where(Listing.skill_id.ilike(f"%{skill_id}%"))
     if min_rating is not None:
-        query = query.where(Agent.reputation_seller >= min_rating)
+        base = base.where(Agent.reputation_seller >= min_rating)
     if max_price is not None:
-        query = query.where(Listing.base_price <= max_price)
+        base = base.where(Listing.base_price <= max_price)
     if price_model:
-        query = query.where(Listing.price_model == PriceModel(price_model))
+        base = base.where(Listing.price_model == PriceModel(price_model))
     if online is not None:
-        query = query.where(Agent.is_online == online)
+        base = base.where(Agent.is_online == online)
+
+    # Count total before pagination
+    count_q = select(func.count()).select_from(
+        base.with_only_columns(Listing.listing_id).subquery()
+    )
+    count_result = await db.execute(count_q)
+    total = count_result.scalar() or 0
 
     # Rank by seller reputation descending, then by price ascending
     query = (
-        query.order_by(Agent.reputation_seller.desc(), Listing.base_price.asc())
+        base.order_by(Agent.reputation_seller.desc(), Listing.base_price.asc())
         .limit(limit)
         .offset(offset)
     )
@@ -164,4 +177,4 @@ async def discover(
             "a2a_skill": a2a_skill,
             "is_online": row.is_online,
         })
-    return results
+    return results, total

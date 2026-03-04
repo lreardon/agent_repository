@@ -100,7 +100,7 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
     # ── 5. Agent B discovers Agent A ──
     resp = await client.get("/discover?skill_id=pdf")
     assert resp.status_code == 200
-    results = resp.json()
+    results = resp.json()["items"]
     assert len(results) >= 1
     found = next(r for r in results if r["seller_agent_id"] == agent_a_id)
     assert found["skill_id"] == "pdf-parse"

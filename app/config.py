@@ -127,6 +127,11 @@ class Settings(BaseSettings):
             return json.loads(raw)
         return [o.strip() for o in raw.split(",") if o.strip()]
 
+    # Admin
+    admin_api_keys: str = ""  # Comma-separated admin API keys; empty = admin disabled
+    deposit_watcher_enabled: bool = True  # Enable background chain scanner
+    deposit_watcher_interval_seconds: int = 15  # Polling interval for chain scanner
+
     # Webhook
     webhook_timeout_seconds: int = 10
     webhook_max_retries: int = 5

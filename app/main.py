@@ -5,14 +5,15 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
-from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet, ws
+from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet, webhooks, ws
 
 logger = logging.getLogger(__name__)
+
 
 async def _recover_wallet_tasks() -> None:
     """Re-spawn confirmation/processing tasks for in-flight deposits and withdrawals."""
@@ -22,6 +23,8 @@ async def _recover_wallet_tasks() -> None:
     from sqlalchemy import select
 
     try:
+        from app.services.task_registry import registry
+
         async with async_session() as db:
             # Recover confirming deposits
             result = await db.execute(
@@ -30,7 +33,8 @@ async def _recover_wallet_tasks() -> None:
             deposits = list(result.scalars().all())
             for dep in deposits:
                 logger.info("Recovering confirming deposit %s (block: %s)", dep.deposit_tx_id, dep.block_number)
-                asyncio.create_task(_wait_and_credit_deposit(dep.deposit_tx_id, dep.block_number))
+                task = asyncio.create_task(_wait_and_credit_deposit(dep.deposit_tx_id, dep.block_number))
+                registry.register(task, f"recover-deposit-{dep.deposit_tx_id}")
 
             # Recover pending/processing withdrawals
             result = await db.execute(
@@ -41,7 +45,8 @@ async def _recover_wallet_tasks() -> None:
             withdrawals = list(result.scalars().all())
             for wd in withdrawals:
                 logger.info("Recovering pending withdrawal %s", wd.withdrawal_id)
-                asyncio.create_task(_process_withdrawal(wd.withdrawal_id))
+                task = asyncio.create_task(_process_withdrawal(wd.withdrawal_id))
+                registry.register(task, f"recover-withdrawal-{wd.withdrawal_id}")
 
             if deposits or withdrawals:
                 logger.info(
@@ -109,24 +114,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup and shutdown."""
     # Start background tasks
     from app.services.deadline_queue import run_deadline_consumer
+    from app.services.deposit_watcher import run_deposit_watcher
     deadline_task = asyncio.create_task(run_deadline_consumer())
+    deposit_watcher_task = asyncio.create_task(run_deposit_watcher())
     await _recover_wallet_tasks()
     await _recover_deadlines()
 
     yield
 
-    # Cleanup
+    # Cleanup: first drain in-flight wallet tasks, then cancel background loops
+    from app.services.task_registry import registry
+    await registry.shutdown(timeout=30)
+
+    deposit_watcher_task.cancel()
     deadline_task.cancel()
-    try:
-        await deadline_task
-    except asyncio.CancelledError:
-        pass
+    for task in (deposit_watcher_task, deadline_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
     title="Agent Registry & Marketplace",
     description="A2A-compatible agent-to-agent task marketplace",
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
@@ -144,16 +156,31 @@ app.add_middleware(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
 
-# Routers
-app.include_router(auth.router)
-app.include_router(agents.router)
-app.include_router(listings.router)
-app.include_router(discover.router)
-app.include_router(fees.router)
-app.include_router(jobs.router)
-app.include_router(reviews.router)
-app.include_router(wallet.router)
-app.include_router(ws.router)
+# ---------------------------------------------------------------------------
+# API versioning: /v1 prefix with backward-compatible root mount
+# ---------------------------------------------------------------------------
+_api_routers = [
+    auth.router,
+    agents.router,
+    listings.router,
+    discover.router,
+    fees.router,
+    jobs.router,
+    reviews.router,
+    wallet.router,
+    webhooks.router,
+    ws.router,
+]
+
+# Primary versioned routes (/v1/...)
+v1_router = APIRouter(prefix="/v1")
+for _r in _api_routers:
+    v1_router.include_router(_r)
+app.include_router(v1_router)
+
+# Backward-compatible root routes (same handlers, no prefix)
+for _r in _api_routers:
+    app.include_router(_r)
 
 # Static files - serve documentation
 from pathlib import Path
@@ -163,6 +190,7 @@ if static_dir.exists():
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+async def health() -> dict:
     """Health check endpoint."""
-    return {"status": "ok"}
+    from app.services.task_registry import registry
+    return {"status": "ok", "in_flight_tasks": registry.active_count}

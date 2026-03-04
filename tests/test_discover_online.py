@@ -61,7 +61,7 @@ async def test_discover_online_true(client: AsyncClient, db_session: AsyncSessio
 
     resp = await client.get("/discover?online=true")
     assert resp.status_code == 200
-    results = resp.json()
+    results = resp.json()["items"]
     assert len(results) >= 1
     for r in results:
         assert r["is_online"] is True
@@ -75,7 +75,7 @@ async def test_discover_online_false(client: AsyncClient, db_session: AsyncSessi
 
     resp = await client.get("/discover?online=false")
     assert resp.status_code == 200
-    results = resp.json()
+    results = resp.json()["items"]
     assert len(results) >= 1
     for r in results:
         assert r["is_online"] is False
@@ -89,7 +89,7 @@ async def test_discover_no_online_filter(client: AsyncClient, db_session: AsyncS
 
     resp = await client.get("/discover")
     assert resp.status_code == 200
-    results = resp.json()
+    results = resp.json()["items"]
     assert len(results) >= 2
     online_states = {r["is_online"] for r in results}
     assert True in online_states
@@ -107,7 +107,7 @@ async def test_discover_online_combined_with_skill_filter(
 
     resp = await client.get("/discover?online=true&skill_id=pdf")
     assert resp.status_code == 200
-    results = resp.json()
+    results = resp.json()["items"]
     assert len(results) == 1
     assert results[0]["skill_id"] == "pdf-online"
     assert results[0]["is_online"] is True
@@ -120,6 +120,6 @@ async def test_discover_result_includes_is_online(client: AsyncClient, db_sessio
 
     resp = await client.get("/discover")
     assert resp.status_code == 200
-    result = resp.json()[0]
+    result = resp.json()["items"][0]
     assert "is_online" in result
     assert isinstance(result["is_online"], bool)

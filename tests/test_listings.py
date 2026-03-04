@@ -121,12 +121,12 @@ async def test_browse_listings(client: AsyncClient) -> None:
     # Browse all
     resp = await client.get("/listings")
     assert resp.status_code == 200
-    assert len(resp.json()) == 3
+    assert len(resp.json()["items"]) == 3
 
     # Filter by capability
     resp = await client.get("/listings?skill_id=pdf")
     assert resp.status_code == 200
-    assert len(resp.json()) == 2  # pdf-extraction and pdf-parse
+    assert len(resp.json()["items"]) == 2  # pdf-extraction and pdf-parse
 
 
 @pytest.mark.asyncio
@@ -143,27 +143,27 @@ async def test_discover(client: AsyncClient) -> None:
     # Discover all
     resp = await client.get("/discover")
     assert resp.status_code == 200
-    results = resp.json()
+    results = resp.json()["items"]
     assert len(results) == 3
 
     # Filter by capability
     resp = await client.get("/discover?skill_id=pdf")
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    assert len(resp.json()["items"]) == 2
 
     # Filter by max_price
     resp = await client.get("/discover?max_price=0.10")
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    assert len(resp.json()["items"]) == 2
 
     # Filter by price_model
     resp = await client.get("/discover?price_model=per_unit")
     assert resp.status_code == 200
-    assert len(resp.json()) == 3
+    assert len(resp.json()["items"]) == 3
 
     resp = await client.get("/discover?price_model=flat")
     assert resp.status_code == 200
-    assert len(resp.json()) == 0
+    assert len(resp.json()["items"]) == 0
 
 
 @pytest.mark.asyncio
@@ -177,7 +177,7 @@ async def test_discover_includes_seller_info(client: AsyncClient) -> None:
 
     resp = await client.get("/discover")
     assert resp.status_code == 200
-    result = resp.json()[0]
+    result = resp.json()["items"][0]
     assert "seller_display_name" in result
     assert "seller_reputation" in result
     assert result["seller_agent_id"] == agent_id
@@ -245,11 +245,11 @@ async def test_browse_listings_pagination(client: AsyncClient) -> None:
 
     resp = await client.get("/listings?limit=2&offset=0")
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    assert len(resp.json()["items"]) == 2
 
     resp = await client.get("/listings?limit=2&offset=2")
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()["items"]) == 1
 
 
 @pytest.mark.asyncio
@@ -272,7 +272,7 @@ async def test_discover_excludes_paused_listings(client: AsyncClient) -> None:
     # Discover should not include it
     resp = await client.get("/discover")
     assert resp.status_code == 200
-    ids = [r["listing_id"] for r in resp.json()]
+    ids = [r["listing_id"] for r in resp.json()["items"]]
     assert listing_id not in ids
 
 
@@ -298,7 +298,7 @@ async def test_discover_with_max_price_filter(client: AsyncClient) -> None:
 
     resp = await client.get("/discover?max_price=50")
     assert resp.status_code == 200
-    for r in resp.json():
+    for r in resp.json()["items"]:
         assert float(r["base_price"]) <= 50
 
 
@@ -317,7 +317,7 @@ async def test_discover_with_price_model_filter(client: AsyncClient) -> None:
 
     resp = await client.get("/discover?price_model=per_hour")
     assert resp.status_code == 200
-    for r in resp.json():
+    for r in resp.json()["items"]:
         assert r["price_model"] == "per_hour"
 
 
@@ -335,7 +335,7 @@ async def test_browse_listings_skill_id_filter(client: AsyncClient) -> None:
 
     resp = await client.get("/listings?skill_id=image")
     assert resp.status_code == 200
-    assert any(r["skill_id"] == "image-generation" for r in resp.json())
+    assert any(r["skill_id"] == "image-generation" for r in resp.json()["items"])
 
 
 @pytest.mark.asyncio
@@ -399,7 +399,7 @@ async def test_discover_deactivated_agent_excluded(client: AsyncClient) -> None:
 
     # Discover should exclude
     resp = await client.get("/discover")
-    ids = [r["listing_id"] for r in resp.json()]
+    ids = [r["listing_id"] for r in resp.json()["items"]]
     assert listing_id not in ids
 
 
@@ -418,7 +418,7 @@ async def test_discover_pagination(client: AsyncClient) -> None:
 
     resp = await client.get("/discover?limit=2&offset=0")
     assert resp.status_code == 200
-    assert len(resp.json()) <= 2
+    assert len(resp.json()["items"]) <= 2
 
 
 @pytest.mark.asyncio
@@ -437,6 +437,6 @@ async def test_discover_combined_filters(client: AsyncClient) -> None:
 
     resp = await client.get("/discover?max_price=50&price_model=per_call")
     assert resp.status_code == 200
-    for r in resp.json():
+    for r in resp.json()["items"]:
         assert float(r["base_price"]) <= 50
         assert r["price_model"] == "per_call"

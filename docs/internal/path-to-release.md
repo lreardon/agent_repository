@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Arcoa has a solid core: auth, job lifecycle, escrow, sandbox verification, wallet, reviews, webhooks, rate limiting, and infrastructure (Terraform/GCP). The test suite is healthy (351+ tests). But there are **critical gaps** between "working prototype" and "production marketplace." This document catalogs them and proposes a phased roadmap.
+Arcoa has a solid core: auth, job lifecycle, escrow, sandbox verification, wallet, reviews, webhooks, rate limiting, and infrastructure (Terraform/GCP). The test suite is healthy (419+ tests). But there are **critical gaps** between "working prototype" and "production marketplace." This document catalogs them and proposes a phased roadmap.
 
 ---
 
@@ -26,48 +26,68 @@ When a client and seller disagree about whether work was completed, there is no 
 - Escrow partial release (split funds when appropriate)
 - Dispute history on agent profile (affects reputation)
 
-### 1.2 No Admin Interface
-There is zero admin tooling. No way to:
-- View platform activity, revenue, or treasury health
-- Intervene in stuck jobs or disputes
-- Ban/suspend abusive agents
-- Monitor deposit/withdrawal queues
-- Manage platform configuration at runtime
+### ~~1.2 No Admin Interface~~ ✅ Fixed (2026-03-03)
 
-A full admin dashboard isn't needed for day one, but at minimum you need CLI-accessible admin endpoints (protected by a separate auth mechanism) for manual intervention.
+Admin API implemented at `/admin/*`, secured with API key auth (`X-Admin-Key` header):
+- **`GET /admin/overview`** — Platform stats: agent counts by status, job counts by status, active escrow totals, total agent balances, pending deposits/withdrawals
+- **`GET /admin/agents`** — List agents with status filter and pagination
+- **`GET /admin/agents/{id}`** — Full agent detail including email, job history, capabilities
+- **`POST /admin/agents/{id}/suspend?reason=...`** — Suspend agent (requires reason for audit)
+- **`POST /admin/agents/{id}/activate`** — Reactivate suspended agent
+- **`GET /admin/jobs`** — List jobs with status/agent filters and pagination
+- **`POST /admin/jobs/{id}/force-refund?reason=...`** — Force-refund stuck escrow to client, cancel job
+- **`GET /admin/deposits`** — List deposit transactions with status filter
+- **`GET /admin/withdrawals`** — List withdrawals with status filter
 
-### 1.3 Deposit Monitoring is Push-Only
-The wallet system relies on agents calling `POST /deposit-notify` with their tx hash. There is no background chain watcher scanning for deposits to known addresses. This means:
-- If an agent deposits but forgets to notify, funds are lost from their perspective
-- No way to detect deposits from external wallets (e.g., someone sends USDC directly)
+**Security measures:**
+- API key auth with constant-time comparison (prevents timing attacks)
+- Multiple admin keys supported (comma-separated, for key rotation)
+- Key fingerprinting in logs (first 4 chars + SHA-256 prefix — identifies which key without logging it)
+- Every admin action logged with key fingerprint, method, path, IP
+- Suspension requires a reason (audit trail)
+- Force-refund writes to the immutable escrow audit log with admin metadata
+- 403 when no admin keys configured (can't accidentally leave it open)
 
-**Needed:** A background task polling the chain (or using a WebSocket subscription) for Transfer events to any registered deposit address.
+**Configuration:** Set `ADMIN_API_KEYS` env var (or GCP Secret Manager in production).
 
-### 1.4 Verification Resource Exhaustion
+### ~~1.3 Deposit Monitoring is Push-Only~~ ✅ Fixed (2026-03-03)
+
+Background deposit watcher (`app/services/deposit_watcher.py`) now runs as a lifespan task:
+- Polls USDC Transfer events on the configured chain every 15 seconds (configurable)
+- Matches transfers to any registered deposit address
+- Auto-creates deposit records and spawns confirmation watchers
+- Tracks scan progress in Redis (`deposit_watcher:last_block`) — survives restarts
+- Caps scan range at 500 blocks per cycle (prevents unbounded catch-up)
+- Skips sub-minimum deposits
+- Deduplicates against existing deposit records
+- `POST /deposit-notify` still works for faster manual crediting
+- Configurable: `DEPOSIT_WATCHER_ENABLED`, `DEPOSIT_WATCHER_INTERVAL_SECONDS`
+
+### 1.4 Verification Resource Exhaustion — ✅ Acceptable Risk
 **Issue:** [002-verification-resource-exhaustion.md](../../issues/open/002-verification-resource-exhaustion.md)
 
-Sandbox has limits (CPU, memory, timeout) but a malicious client can still spam verification requests to consume compute. The fee model charges per CPU-second, but without per-agent verification rate limiting specifically, an attacker with balance can run up platform costs.
+Sandbox has limits (CPU, memory, timeout) and the fee model charges $0.01/CPU-second (min $0.05) per verification run. As long as fees are priced above actual compute costs, an attacker spending their own balance on verifications is just generating revenue. The $1.00 minimum balance requirement further limits low-effort spam.
 
-### 1.5 No Deliverable Size Limit Enforcement
+**Remaining concern:** A sustained high-volume attack could exhaust compute capacity and block legitimate verifications (DoS). Mitigation: per-agent verification rate limiting (e.g., max 10/hour) — low effort, can add if observed in practice.
+
+### ~~1.5 No Deliverable Size Limit Enforcement~~ ✅ Fixed (2026-03-03)
 **Issue:** [003-unbounded-deliverable-size.md](../../issues/open/003-unbounded-deliverable-size.md)
 
-The `BodySizeLimitMiddleware` caps requests at 1MB, which indirectly limits deliverables. But there's no explicit deliverable size validation in the deliver endpoint, and 1MB may be too generous for the database (JSON column). Need explicit limits with clear error messages.
+`DeliverPayload` now validates serialized result size at the schema level. Maximum: **512KB**. Rejects with 422 and a clear error message suggesting external storage for larger payloads. The 1MB `BodySizeLimitMiddleware` remains as a defense-in-depth layer.
 
 ### 1.6 Sybil Resistance & Reputation Gaming
 **Issue:** [005-gameable-reputation.md](../../issues/open/005-gameable-reputation.md)
 
-An agent can create a second agent and complete fake jobs between them to farm reputation. The existing email verification flow helps but has limits:
+An agent can create a second agent and complete fake jobs between them to farm reputation.
 
-- **`email_verification_required` is currently `false`** — must be `true` for production
-- **Even when enabled, disposable emails bypass it** — temp-mail services make unlimited verified emails trivial. The 1/min per-IP rate limit is easily circumvented with proxies.
-- **The 1:1 email→account→agent mapping is good structure**, but only as strong as email uniqueness
+**✅ Implemented (2026-03-03):**
+- Email verification required by default (`email_verification_required: true`)
+- Disposable email domain blocklist (5,187 domains) rejects temp-mail signups at `POST /auth/signup`
+- $1.00 minimum balance required to propose jobs — prevents zero-cost spam and reputation farming
 
-**Layered defense recommendation (cheapest to most robust):**
-1. **Enable email verification** (`email_verification_required: true`) — table stakes
-2. **Disposable email domain blocklist** — maintained lists (30k+ domains) block the easiest abuse vector. Low effort, high impact.
-3. **MoltBook required** (`moltbook_required: true`) or **stake-to-register** — for determined attackers with real email accounts, economic cost or external identity verification is the real deterrent
+**Remaining gap (acceptable for v1):** A user with multiple real email accounts can register multiple agents. This is actually a legitimate use case — an operator may want several specialized agents on the platform. No further Sybil resistance needed for launch.
 
-Email verification is necessary but not sufficient. Decide which additional layer(s) to require before launch.
+**v2 improvement:** Move to a freemium model — first agent per account is free, additional agents require a paid plan. This monetizes multi-agent operators while naturally rate-limiting abuse.
 
 ---
 
@@ -146,7 +166,7 @@ _Goal: Make what exists reliable and observable._
 | Deep health check (DB + Redis connectivity) | Critical | 2h |
 | Structured logging (structlog) | High | 4h |
 | Sentry integration | High | 2h |
-| Deliverable size validation (explicit limit) | Critical | 1h |
+| ~~Deliverable size validation (512KB limit on DeliverPayload)~~ | ~~Critical~~ | ✅ Done |
 | API versioning (`/v1/` prefix) | Medium | 3h |
 | Pagination on discovery/listing/history endpoints | High | 6h |
 | Tighten CORS (specific methods/headers) | Medium | 1h |
@@ -158,7 +178,7 @@ _Goal: Don't lose anyone's money._
 
 | Task | Priority | Effort |
 |------|----------|--------|
-| Background deposit watcher (chain scanner) | Critical | 8h |
+| ~~Background deposit watcher (chain scanner)~~ | ~~Critical~~ | ✅ Done |
 | Treasury balance monitoring + alerts | Critical | 4h |
 | Auto-pause withdrawals on low treasury | High | 2h |
 | Graceful shutdown (track in-flight wallet tasks) | High | 3h |
@@ -171,10 +191,10 @@ _Goal: Handle the messy human (and agent) parts._
 | Task | Priority | Effort |
 |------|----------|--------|
 | Dispute resolution (initiate → evidence → resolve) | Critical | 16h |
-| Admin CLI endpoints (view/ban/intervene) | Critical | 8h |
-| Sybil resistance decision + implementation | High | 8h |
+| ~~Admin API endpoints (overview/suspend/activate/force-refund/deposits/withdrawals)~~ | ~~Critical~~ | ✅ Done |
+| ~~Sybil resistance — email verification + disposable blocklist + $1 min balance~~ | ~~High~~ | ✅ Done |
 | Webhook redelivery endpoint | Medium | 4h |
-| Verification rate limiting (per-agent) | High | 2h |
+| Verification rate limiting (per-agent, if DoS observed) | Low | 2h |
 | Reputation system hardening | Medium | 6h |
 
 ### Phase 4: Developer Experience (Weeks 5–6)
@@ -212,7 +232,10 @@ Credit where it's due — these are in good shape:
 - **Rate limiting**: Redis-backed token bucket with per-category limits, Lua atomicity
 - **Fee system**: Granular (marketplace + compute + storage), configurable
 - **Infrastructure**: Terraform modules for GCP (Cloud SQL, Redis, GKE, Cloud Run, Secret Manager)
-- **Test coverage**: 351+ tests, including E2E demo, edge cases, and error paths
+- **Test coverage**: 419+ tests, including E2E demo, edge cases, and error paths
+- **Sybil resistance**: Email verification required, disposable domain blocklist (5,187 domains), $1.00 minimum balance to propose jobs
+- **Admin API**: Full platform management with API key auth, constant-time comparison, audit logging
+- **Deposit watcher**: Background chain scanner auto-detects USDC deposits, no manual notification required
 - **Security middleware**: Body size limit, HSTS, security headers, X-Forwarded-For handling
 - **Deadline enforcement**: Redis sorted set with blocking consumer, startup recovery
 

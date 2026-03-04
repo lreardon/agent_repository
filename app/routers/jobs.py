@@ -2,12 +2,14 @@
 
 import uuid
 
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
+from app.redis import get_redis
 from app.schemas.job import AcceptJob, CounterProposal, DeliverPayload, JobProposal, JobResponse, VerifyResponse
 from app.schemas.escrow import EscrowResponse
 from app.services import escrow as escrow_service
@@ -140,85 +142,96 @@ async def verify_job(
     job_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
 ) -> dict:
     """Run acceptance tests on delivered job. Auto-completes or fails.
 
     Verification fee is charged to the client — even if verification fails.
     This disincentivizes resource-exhaustion attacks and rigged scripts.
+    Only one verification may run per job at a time.
     """
     import time as _time
     from fastapi import HTTPException as HTTPExc
     from app.services.fees import calculate_verification_fee, charge_fee
 
-    job = await job_service.get_job(db, job_id)
+    # Prevent concurrent verification for the same job
+    lock_key = f"verify_lock:{job_id}"
+    acquired = await redis.set(lock_key, "1", nx=True, ex=600)  # 10min TTL safety net
+    if not acquired:
+        raise HTTPExc(status_code=409, detail="Verification already in progress for this job")
 
-    if auth.agent_id != job.client_agent_id:
-        raise HTTPExc(status_code=403, detail="Only the client can trigger verification")
+    try:
+        job = await job_service.get_job(db, job_id)
 
-    if job.status.value != "delivered":
-        raise HTTPExc(status_code=409, detail=f"Job must be delivered to verify, currently {job.status.value}")
+        if auth.agent_id != job.client_agent_id:
+            raise HTTPExc(status_code=403, detail="Only the client can trigger verification")
 
-    # Run verification
-    criteria = job.acceptance_criteria or {}
-    output = job.result
+        if job.status.value != "delivered":
+            raise HTTPExc(status_code=409, detail=f"Job must be delivered to verify, currently {job.status.value}")
 
-    # Reject any non-script criteria (declarative v1.0 not supported)
-    if criteria and not criteria.get("script"):
-        raise HTTPExc(
-            status_code=422,
-            detail="Only script-based acceptance criteria are supported. "
-                   "Provide a 'script' key (base64-encoded) in acceptance_criteria.",
-        )
+        # Run verification
+        criteria = job.acceptance_criteria or {}
+        output = job.result
 
-    cpu_seconds = 0.0
-    if criteria.get("script"):
-        # Script-based: run in Docker sandbox
-        suite_result = await run_script_test(criteria, output)
-        # Use actual elapsed time from sandbox
-        if suite_result.sandbox_result:
-            cpu_seconds = suite_result.sandbox_result.elapsed_seconds
-    else:
-        # No criteria defined — charge minimum fee, auto-complete
-        verify_fee = calculate_verification_fee(0.0)
+        # Reject any non-script criteria (declarative v1.0 not supported)
+        if criteria and not criteria.get("script"):
+            raise HTTPExc(
+                status_code=422,
+                detail="Only script-based acceptance criteria are supported. "
+                       "Provide a 'script' key (base64-encoded) in acceptance_criteria.",
+            )
+
+        cpu_seconds = 0.0
+        if criteria.get("script"):
+            # Script-based: run in Docker sandbox
+            suite_result = await run_script_test(criteria, output)
+            # Use actual elapsed time from sandbox
+            if suite_result.sandbox_result:
+                cpu_seconds = suite_result.sandbox_result.elapsed_seconds
+        else:
+            # No criteria defined — charge minimum fee, auto-complete
+            verify_fee = calculate_verification_fee(0.0)
+            await charge_fee(db, auth.agent_id, verify_fee)
+            escrow = await escrow_service.release_escrow(db, job_id)
+            job = await job_service.get_job(db, job_id)
+            resp = VerifyResponse(job=JobResponse.model_validate(job), verification=None)
+            return {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
+
+        # Charge verification fee AFTER running (based on actual resource usage)
+        # but BEFORE releasing escrow (so fee is paid regardless of outcome)
+        verify_fee = calculate_verification_fee(cpu_seconds)
         await charge_fee(db, auth.agent_id, verify_fee)
-        escrow = await escrow_service.release_escrow(db, job_id)
-        job = await job_service.get_job(db, job_id)
-        resp = VerifyResponse(job=JobResponse.model_validate(job), verification=None)
+
+        verification = suite_result.to_dict()
+
+        if suite_result.passed:
+            escrow = await escrow_service.release_escrow(db, job_id)
+            job = await job_service.get_job(db, job_id)
+        else:
+            # Verification failed — seller is responsible for the compute cost.
+            # Refund client's verification fee, charge seller instead.
+            from app.models.agent import Agent
+            from sqlalchemy import select as sel
+
+            # Refund client
+            client_row = await db.execute(sel(Agent).where(Agent.agent_id == auth.agent_id).with_for_update())
+            client_agent = client_row.scalar_one()
+            client_agent.balance += verify_fee.amount
+
+            # Charge seller (best-effort — if seller can't cover, platform absorbs)
+            seller_row = await db.execute(sel(Agent).where(Agent.agent_id == job.seller_agent_id).with_for_update())
+            seller_agent = seller_row.scalar_one()
+            if seller_agent.balance >= verify_fee.amount:
+                seller_agent.balance -= verify_fee.amount
+            job = await job_service.fail_job(db, job_id, auth.agent_id)
+
+        resp = VerifyResponse(
+            job=JobResponse.model_validate(job),
+            verification=verification,
+        )
         return {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
-
-    # Charge verification fee AFTER running (based on actual resource usage)
-    # but BEFORE releasing escrow (so fee is paid regardless of outcome)
-    verify_fee = calculate_verification_fee(cpu_seconds)
-    await charge_fee(db, auth.agent_id, verify_fee)
-
-    verification = suite_result.to_dict()
-
-    if suite_result.passed:
-        escrow = await escrow_service.release_escrow(db, job_id)
-        job = await job_service.get_job(db, job_id)
-    else:
-        # Verification failed — seller is responsible for the compute cost.
-        # Refund client's verification fee, charge seller instead.
-        from app.models.agent import Agent
-        from sqlalchemy import select as sel
-
-        # Refund client
-        client_row = await db.execute(sel(Agent).where(Agent.agent_id == auth.agent_id).with_for_update())
-        client_agent = client_row.scalar_one()
-        client_agent.balance += verify_fee.amount
-
-        # Charge seller (best-effort — if seller can't cover, platform absorbs)
-        seller_row = await db.execute(sel(Agent).where(Agent.agent_id == job.seller_agent_id).with_for_update())
-        seller_agent = seller_row.scalar_one()
-        if seller_agent.balance >= verify_fee.amount:
-            seller_agent.balance -= verify_fee.amount
-        job = await job_service.fail_job(db, job_id, auth.agent_id)
-
-    resp = VerifyResponse(
-        job=JobResponse.model_validate(job),
-        verification=verification,
-    )
-    return {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
+    finally:
+        await redis.delete(lock_key)
 
 
 @router.post("/{job_id}/fail", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])

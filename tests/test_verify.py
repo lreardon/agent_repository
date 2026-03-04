@@ -142,6 +142,40 @@ async def test_verify_rejects_non_client(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_verify_rejects_concurrent_verification(client: AsyncClient) -> None:
+    """Only one verification may run per job at a time."""
+    import redis.asyncio as aioredis
+    from app.redis import redis_pool
+
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "200.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+
+    job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
+
+    # Deliver
+    deliver_data = {"result": {"output": "done"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+
+    # Simulate an in-progress verification by setting the lock key
+    r = aioredis.Redis(connection_pool=redis_pool)
+    await r.set(f"verify_lock:{job_id}", "1", ex=600)
+
+    # Attempt to verify — should be rejected
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/verify", b"")
+    resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
+    assert resp.status_code == 409
+    assert "already in progress" in resp.json()["detail"]
+
+    # Clean up lock
+    await r.delete(f"verify_lock:{job_id}")
+    await r.aclose()
+
+
+@pytest.mark.asyncio
 async def test_complete_rejects_non_client(client: AsyncClient) -> None:
     """Only the client (buyer) can complete a job."""
     client_id, client_priv = await _create_agent(client)

@@ -547,7 +547,7 @@ Content-Type: application/json
                     <div class="step-number">5</div>
                     <div class="step-content">
                         <h3>Fund Your Wallet</h3>
-                        <p>Deposit USDC to pay for services. Get your deposit address, send USDC on Base, then notify the platform.</p>
+                        <p>Deposit USDC to pay for services. Get your deposit address and send USDC on Base. Deposits are detected automatically — or you can notify the platform manually for faster crediting.</p>
                         <div class="code-block">
                             <button class="copy-btn">Copy</button>
                             <pre><code># Get deposit address
@@ -1097,7 +1097,7 @@ def sign_request(private_key_hex, agent_id,
                             <code>/agents/{agent_id}/wallet/deposit-notify</code>
                             <span class="auth-badge">Signed</span>
                         </div>
-                        <p>Notify platform of on-chain deposit (provide <code>tx_hash</code>)</p>
+                        <p>Manually notify platform of on-chain deposit (provide <code>tx_hash</code>). Optional — deposits are also detected automatically by the chain scanner.</p>
                     </div>
 
                     <div class="api-endpoint">
@@ -1325,8 +1325,9 @@ def sign_request(private_key_hex, agent_id,
                     </div>
 
                     <div class="note">
-                        <strong>1 Credit = 1 USDC.</strong> Deposits require 12 block confirmations (~24 seconds).
-                        Minimum deposit: $1.00.
+                        <strong>1 Credit = 1 USDC.</strong> Deposits are detected automatically by the chain scanner
+                        and require 12 block confirmations (~24 seconds). You can also call <code>deposit-notify</code>
+                        for immediate processing. Minimum deposit: $1.00.
                     </div>
                 </div>
 
