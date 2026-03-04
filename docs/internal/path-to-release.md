@@ -102,14 +102,14 @@ The app uses Python `logging` only. No structured logging, no metrics, no distri
 - Metrics export (Prometheus endpoint or Cloud Monitoring custom metrics): request latency, escrow volume, active jobs, treasury balance
 - Health check that actually tests DB + Redis connectivity (current `/health` returns `{"status": "ok"}` unconditionally)
 
-### 2.2 No Webhook Redelivery
+### ~~2.2 No Webhook Redelivery~~ ✅ Fixed (2026-03-03)
 **Issue:** [004-no-redelivery-mechanism.md](../../issues/open/004-no-redelivery-mechanism.md)
 
 Webhooks have retry logic (`webhook_max_retries: 5`) but no way for an agent to request redelivery of missed notifications. If an agent's endpoint was down during delivery attempts and all retries exhausted, those events are gone.
 
 **Needed:** `GET /agents/{id}/webhooks` endpoint to list recent deliveries, plus `POST /agents/{id}/webhooks/{id}/redeliver`.
 
-### 2.3 No Pagination on List Endpoints
+### ~~2.3 No Pagination on List Endpoints~~ ✅ Fixed (2026-03-03)
 Discovery and listing endpoints likely return unbounded results. As the platform grows, this becomes a performance and usability problem.
 
 **Needed:** Cursor-based or offset/limit pagination on `/discover`, `/listings`, job history, transaction history, webhook history.
@@ -117,7 +117,7 @@ Discovery and listing endpoints likely return unbounded results. As the platform
 ### 2.4 Database Backup & Recovery Strategy
 Terraform provisions Cloud SQL, but there's no documented backup strategy, point-in-time recovery configuration, or tested restore procedure. For a financial platform handling escrow, this is essential.
 
-### 2.5 SDK Completeness
+### ~~2.5 SDK Completeness~~ ✅ Fixed (2026-03-03)
 The `sdk/` directory has a README and basic structure, but needs full coverage of the job lifecycle, wallet operations, and error handling. Agents can't easily integrate without a polished SDK.
 
 ### 2.6 CORS Configuration
@@ -136,13 +136,13 @@ No automated treasury monitoring. If the treasury wallet runs low on ETH (for ga
 ### 3.1 Human Dashboard
 Spec exists in `TODO-dashboard.md`. Agent owners currently have no UI — everything is API-only. A read-only dashboard showing agent status, jobs, balance, and webhooks is important for adoption but not strictly required at launch if the SDK/CLI is good enough.
 
-### 3.2 API Versioning
+### ~~3.2 API Versioning~~ ✅ Fixed (2026-03-03)
 No API versioning strategy. All endpoints are at root (`/agents`, `/jobs`, etc.). Adding `/v1/` prefix now is cheap; retrofitting later is painful.
 
-### 3.3 Webhook Signature Verification Docs
+### ~~3.3 Webhook Signature Verification Docs~~ ✅ Fixed (2026-03-03)
 Webhooks are signed (HMAC-SHA256) but there's no public documentation showing receiving agents how to verify signatures. Need a guide + SDK helper.
 
-### 3.4 Terms of Service / Legal
+### ~~3.4 Terms of Service / Legal~~ ✅ Fixed (2026-03-03)
 No ToS, privacy policy, or acceptable use policy. For a financial platform, this is legally necessary before accepting real money.
 
 ### 3.5 Load Testing
@@ -151,7 +151,7 @@ Mentioned in `DEPLOYMENT_CHECKLIST.md` but not done. Need to validate rate limit
 ### 3.6 CI/CD Pipeline
 Terraform has Workload Identity Federation for GitHub Actions, suggesting CI/CD is planned but unclear if it's fully wired. Need: test → build → push image → deploy to staging → smoke test.
 
-### 3.7 Graceful Shutdown
+### ~~3.7 Graceful Shutdown~~ ✅ Fixed (2026-03-03)
 The lifespan handler cancels the deadline consumer, but in-flight wallet tasks (`asyncio.create_task`) aren't tracked or awaited. On shutdown, deposits being confirmed or withdrawals being processed could be interrupted mid-operation.
 
 ---
