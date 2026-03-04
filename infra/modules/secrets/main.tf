@@ -88,6 +88,25 @@ resource "google_secret_manager_secret_iam_member" "resend_api_key_access" {
 }
 
 # --------------------------------------------------------------------------
+# Treasury wallet private key
+# --------------------------------------------------------------------------
+# Note: Secret value must be added manually via:
+#   echo -n "0xYOUR_KEY" | gcloud secrets versions add treasury-wallet-private-key --data-file=-
+resource "google_secret_manager_secret" "treasury_wallet_key" {
+  secret_id = "treasury_wallet_private_key"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "treasury_wallet_key_access" {
+  secret_id = google_secret_manager_secret.treasury_wallet_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.cloud_run_service_account}"
+}
+
+# --------------------------------------------------------------------------
 # Outputs
 # --------------------------------------------------------------------------
 output "db_password_secret_id" {

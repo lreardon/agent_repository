@@ -11,12 +11,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     platform_signing_key: str = "dev-signing-key-not-for-production"  # ⚠️ ROTATE BEFORE PRODUCTION
 
-    # DEPRECATED: use fee_base_percent instead. Kept for backward compat with .env files.
-    platform_fee_percent: Decimal = Decimal("0.025")
-
     # --- Fee schedule ---
     # Base marketplace fee: percentage of agreed price, split 50/50 between client and seller.
-    # Charged at escrow release (completion). Replaces the old flat platform_fee_percent.
+    # Charged at escrow release (completion).
     fee_base_percent: Decimal = Decimal("0.01")  # 1% total (0.5% each)
 
     # Verification compute fee: charged to the CLIENT when they trigger /verify.
@@ -62,6 +59,8 @@ class Settings(BaseSettings):
     blockchain_rpc_url: str = ""  # Auto-set from network if empty
     treasury_wallet_private_key: str = ""  # Required for withdrawal processing
     treasury_wallet_address: str = ""  # Public address for balance monitoring (no private key needed)
+    treasury_pause_threshold_usdc: Decimal = Decimal("100.00")  # Auto-pause withdrawals below this USDC balance
+    treasury_alert_threshold_usdc: Decimal = Decimal("500.00")  # Log critical alert below this USDC balance
     hd_wallet_master_seed: str = ""  # BIP-39 mnemonic for per-agent deposit addresses
     usdc_contract_address: str = ""  # Auto-set from network if empty
     min_deposit_amount: Decimal = Decimal("0.01")

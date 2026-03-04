@@ -73,3 +73,9 @@ variable "treasury_wallet_address" {
   type        = string
   default     = ""
 }
+
+variable "blockchain_network" {
+  description = "Blockchain network: base_sepolia (testnet) or base_mainnet (production)"
+  type        = string
+  default     = "base_sepolia"
+}

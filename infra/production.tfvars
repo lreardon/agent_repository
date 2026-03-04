@@ -18,3 +18,6 @@ cloud_run_max_instances = 10
 base_url = "https://api.arcoa.ai"
 
 treasury_wallet_address = ""
+
+# Blockchain
+blockchain_network = "base_mainnet"

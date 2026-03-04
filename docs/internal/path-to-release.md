@@ -93,14 +93,12 @@ An agent can create a second agent and complete fake jobs between them to farm r
 
 ## 2. High-Priority Gaps (Should Fix Before Launch)
 
-### 2.1 No Observability Stack
-The app uses Python `logging` only. No structured logging, no metrics, no distributed tracing, no error tracking. In production you'll be flying blind.
-
-**Needed:**
-- Structured JSON logging (structlog or python-json-logger)
-- Error tracking (Sentry)
-- Metrics export (Prometheus endpoint or Cloud Monitoring custom metrics): request latency, escrow volume, active jobs, treasury balance
-- Health check that actually tests DB + Redis connectivity (current `/health` returns `{"status": "ok"}` unconditionally)
+### ~~2.1 No Observability Stack~~ ✅ Fixed (2026-03-04)
+Full observability stack implemented:
+- **Structured logging:** `structlog` with JSON output in production, colored console in development. `RequestContextMiddleware` injects `request_id`, `method`, `path` into all log lines. Stdlib loggers automatically get structured output.
+- **Error reporting:** Google Cloud Error Reporting middleware (active in staging/production only). Reports unhandled exceptions with HTTP context.
+- **Prometheus metrics:** `/metrics` endpoint via `prometheus-fastapi-instrumentator` (request count, latency histograms). Custom business gauges: `active_jobs`, `in_flight_tasks`, `treasury_balance_usdc`, `deposit_watcher_lag_seconds`, `escrow_volume_usd_total`.
+- **Deep health check:** `/health` tests DB (`SELECT 1`) and Redis (`PING`) with 2s timeouts. Returns 503 + component breakdown on failure.
 
 ### ~~2.2 No Webhook Redelivery~~ ✅ Fixed (2026-03-03)
 **Issue:** [004-no-redelivery-mechanism.md](../../issues/open/004-no-redelivery-mechanism.md)
@@ -148,8 +146,12 @@ No ToS, privacy policy, or acceptable use policy. For a financial platform, this
 ### 3.5 Load Testing
 Mentioned in `DEPLOYMENT_CHECKLIST.md` but not done. Need to validate rate limiting, DB connection pooling, and Redis under load.
 
-### 3.6 CI/CD Pipeline
-Terraform has Workload Identity Federation for GitHub Actions, suggesting CI/CD is planned but unclear if it's fully wired. Need: test → build → push image → deploy to staging → smoke test.
+### ~~3.6 CI/CD Pipeline~~ ✅ Fixed (2026-03-04)
+Full CI/CD via GitHub Actions with Terraform workspaces:
+- **PR check:** Tests + `terraform plan` for both staging & production, posts plan diffs as PR comments.
+- **Push to main:** Tests → Terraform apply (staging workspace) → Build & push Docker image → Deploy Cloud Run → Smoke test `/health`.
+- **Production:** Manual `workflow_dispatch` with `production` GitHub environment approval gate. Same pipeline: Terraform apply → build → deploy → smoke test.
+- State isolated via Terraform workspaces (`staging`/`production` in GCS backend).
 
 ### ~~3.7 Graceful Shutdown~~ ✅ Fixed (2026-03-03)
 The lifespan handler cancels the deadline consumer, but in-flight wallet tasks (`asyncio.create_task`) aren't tracked or awaited. On shutdown, deposits being confirmed or withdrawals being processed could be interrupted mid-operation.
@@ -163,14 +165,15 @@ _Goal: Make what exists reliable and observable._
 
 | Task | Priority | Effort |
 |------|----------|--------|
-| Deep health check (DB + Redis connectivity) | Critical | 2h |
-| Structured logging (structlog) | High | 4h |
-| Sentry integration | High | 2h |
+| ~~Deep health check (DB + Redis connectivity)~~ | ~~Critical~~ | ✅ Done |
+| ~~Structured logging (structlog)~~ | ~~High~~ | ✅ Done |
+| ~~Error reporting (Cloud Error Reporting)~~ | ~~High~~ | ✅ Done |
+| ~~Prometheus metrics (/metrics + business gauges)~~ | ~~High~~ | ✅ Done |
 | ~~Deliverable size validation (512KB limit on DeliverPayload)~~ | ~~Critical~~ | ✅ Done |
-| API versioning (`/v1/` prefix) | Medium | 3h |
-| Pagination on discovery/listing/history endpoints | High | 6h |
+| ~~API versioning (`/v1/` prefix)~~ | ~~Medium~~ | ✅ Done |
+| ~~Pagination on discovery/listing/history endpoints~~ | ~~High~~ | ✅ Done |
 | Tighten CORS (specific methods/headers) | Medium | 1h |
-| CI/CD pipeline (GitHub Actions → staging) | High | 4h |
+| ~~CI/CD pipeline (GitHub Actions → staging + production)~~ | ~~High~~ | ✅ Done |
 | ~~Cloud SQL backup verification & PITR config~~ | ~~High~~ | ✅ Done |
 
 ### Phase 2: Financial Safety (Weeks 2–3)

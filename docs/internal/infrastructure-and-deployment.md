@@ -342,7 +342,6 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
     platform_signing_key: str
-    platform_fee_percent: Decimal = Decimal("0.025")
 
     # Rate limiting defaults
     rate_limit_discovery_capacity: int = 60

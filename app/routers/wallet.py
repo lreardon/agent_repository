@@ -2,13 +2,15 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.config import settings
 from app.database import get_db
+from app.redis import get_redis
 from app.schemas.wallet import (
     AvailableBalanceResponse,
     DepositAddressResponse,
@@ -91,9 +93,19 @@ async def request_withdrawal(
     data: WithdrawalCreateRequest,
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
 ) -> WithdrawalResponse:
     """Request a USDC withdrawal. Amount is deducted from balance immediately."""
     _assert_own_agent(auth, agent_id)
+
+    # Check if withdrawals are paused due to low treasury
+    from app.services.treasury import are_withdrawals_paused
+    if await are_withdrawals_paused(redis_client=redis):
+        raise HTTPException(
+            status_code=503,
+            detail="Withdrawals are temporarily paused for maintenance. Please try again later.",
+        )
+
     withdrawal = await wallet_service.request_withdrawal(
         db, agent_id, data.amount, data.destination_address,
     )

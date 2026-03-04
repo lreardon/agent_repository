@@ -96,6 +96,12 @@ variable "treasury_wallet_address" {
   default     = ""
 }
 
+variable "blockchain_network" {
+  description = "Blockchain network: base_sepolia or base_mainnet"
+  type        = string
+  default     = "base_sepolia"
+}
+
 # --------------------------------------------------------------------------
 # Cloud Run service
 # --------------------------------------------------------------------------
@@ -246,6 +252,21 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "TREASURY_WALLET_ADDRESS"
         value = var.treasury_wallet_address
+      }
+
+      env {
+        name  = "BLOCKCHAIN_NETWORK"
+        value = var.blockchain_network
+      }
+
+      env {
+        name = "TREASURY_WALLET_PRIVATE_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "treasury_wallet_private_key"
+            version = "latest"
+          }
+        }
       }
 
       startup_probe {

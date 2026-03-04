@@ -110,6 +110,13 @@ async def fund_job(
     await db.commit()
     await db.refresh(escrow)
 
+    # Track escrow volume in Prometheus
+    try:
+        from app.metrics import escrow_volume_total
+        escrow_volume_total.inc(float(amount))
+    except Exception:
+        pass  # metrics are best-effort
+
     # Enqueue deadline enforcement if job has a delivery deadline
     if job.delivery_deadline is not None:
         try:

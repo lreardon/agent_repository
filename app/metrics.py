@@ -83,35 +83,17 @@ async def update_gauges_once() -> None:
 
 
 async def update_treasury_balance() -> None:
-    """Update treasury USDC balance from on-chain. Expensive — call infrequently."""
+    """Update treasury USDC balance and check pause thresholds. Expensive — call infrequently."""
     try:
-        from app.config import settings
-        from web3 import AsyncWeb3, AsyncHTTPProvider
+        from app.services.treasury import check_treasury_and_update_pause, get_treasury_usdc_balance
 
-        if not settings.treasury_wallet_address:
-            return  # Not configured — skip silently
+        # Run the pause/resume check (also fetches balance)
+        await check_treasury_and_update_pause()
 
-        w3 = AsyncWeb3(AsyncHTTPProvider(settings.resolved_rpc_url))
-
-        ERC20_BALANCE_ABI = [
-            {
-                "constant": True,
-                "inputs": [{"name": "_owner", "type": "address"}],
-                "name": "balanceOf",
-                "outputs": [{"name": "balance", "type": "uint256"}],
-                "type": "function",
-            }
-        ]
-
-        usdc = w3.eth.contract(
-            address=w3.to_checksum_address(settings.resolved_usdc_address),
-            abi=ERC20_BALANCE_ABI,
-        )
-        treasury_addr = w3.to_checksum_address(settings.treasury_wallet_address)
-        raw_balance = await usdc.functions.balanceOf(treasury_addr).call()
-        # USDC has 6 decimals
-        balance = raw_balance / 1_000_000
-        treasury_balance_gauge.set(balance)
+        # Update the Prometheus gauge
+        balance = await get_treasury_usdc_balance()
+        if balance is not None:
+            treasury_balance_gauge.set(float(balance))
 
     except Exception:
         logger.warning("Failed to update treasury balance metric", exc_info=True)

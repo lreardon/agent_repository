@@ -31,7 +31,6 @@ Complete this checklist before going to production.
 
 - [ ] **Set appropriate rate limits** — Review capacity and refill rates for your expected load.
 - [ ] **Configure MoltBook integration** — Set `moltbook_api_key`, decide on `moltbook_required`.
-- [ ] **Review platform fee** — Confirm `platform_fee_percent=0.025` (2.5%) is desired.
 - [ ] **Set webhook timeouts** — Adjust `webhook_timeout_seconds` and `webhook_max_retries` as needed.
 
 ## 🧪 Pre-Launch Testing

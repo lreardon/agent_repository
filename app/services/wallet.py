@@ -297,7 +297,10 @@ async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
             raw_amount = _credits_to_usdc_raw(withdrawal.net_payout)
             dest = w3.to_checksum_address(withdrawal.destination_address)
 
-            nonce = await w3.eth.get_transaction_count(treasury.address)
+            # Use pending nonce to serialize with other in-flight transactions.
+            # SELECT FOR UPDATE above ensures only one task processes this withdrawal,
+            # and pending nonce ensures we don't reuse a nonce from another concurrent withdrawal.
+            nonce = await w3.eth.get_transaction_count(treasury.address, "pending")
             tx = await usdc.functions.transfer(dest, raw_amount).build_transaction({
                 "from": treasury.address,
                 "nonce": nonce,

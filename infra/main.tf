@@ -256,6 +256,7 @@ module "cloud_run" {
   sandbox_gke_location     = var.region
   sandbox_service_account  = module.gke.sandbox_service_account_email
   treasury_wallet_address  = var.treasury_wallet_address
+  blockchain_network       = var.blockchain_network
 
   depends_on = [
     module.database,
