@@ -28,7 +28,7 @@ import json
 import os
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import httpx
@@ -390,10 +390,10 @@ def main() -> None:
             "version": "2.0",
             "script": script_b64,
             "runtime": "python:3.13",
-            "timeout_seconds": 60,
+            "timeout_seconds": 120,
             "memory_limit_mb": 256,
         },
-        "delivery_deadline": "2026-02-28T00:00:00Z",
+        "delivery_deadline": (datetime.now(UTC) + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "max_rounds": 5,
     }), 201, "Job proposal")
     job_id = data["job_id"]
@@ -403,7 +403,7 @@ def main() -> None:
     step(8, "Alice reviews terms and counters: $30, faster delivery")
     data = expect(alice.post(f"/jobs/{job_id}/counter", {
         "proposed_price": COUNTER_PRICE_1,
-        "counter_terms": {"delivery_deadline": "2026-02-27T00:00:00Z"},
+        "counter_terms": {"delivery_deadline": (datetime.now(UTC) + timedelta(days=6)).strftime("%Y-%m-%dT%H:%M:%SZ")},
         "message": "50 pages with OCR is heavy lifting. $30 flat, but I'll deliver a day early.",
     }), 200, "Alice counter")
     agent_says("Alice", BLUE, f"Counter: $3.00 — \"50 pages is heavy, but I'll deliver early.\"")
@@ -412,7 +412,7 @@ def main() -> None:
     step(9, "Bob counters back: $28, keep the early delivery")
     data = expect(bob.post(f"/jobs/{job_id}/counter", {
         "proposed_price": COUNTER_PRICE_2,
-        "counter_terms": {"delivery_deadline": "2026-02-27T00:00:00Z"},
+        "counter_terms": {"delivery_deadline": (datetime.now(UTC) + timedelta(days=6)).strftime("%Y-%m-%dT%H:%M:%SZ")},
         "accepted_terms": ["early_delivery"],
         "message": "Love the early delivery. Meet me at $2.80?",
     }), 200, "Bob counter")
@@ -425,7 +425,7 @@ def main() -> None:
         "version": "2.0",
         "script": script_b64,
         "runtime": "python:3.13",
-        "timeout_seconds": 60,
+        "timeout_seconds": 120,
         "memory_limit_mb": 256,
     }
     criteria_canonical = json.dumps(acceptance_criteria, sort_keys=True, separators=(",", ":"))
@@ -573,15 +573,25 @@ def main() -> None:
 
     step(17, "Alice withdraws her earnings as USDC")
     withdraw_amount = alice_earned
-    data = expect(alice.post(f"/agents/{alice.agent_id}/wallet/withdraw", {
-        "amount": str(withdraw_amount),
-        "destination_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18",
-    }), 201, "Alice withdrawal")
-    agent_says("Alice", BLUE, f"Withdrawal requested: ${data['amount']}")
-    agent_says("Alice", BLUE, f"Fee: ${data['fee']} (covers Base L2 gas)")
-    agent_says("Alice", BLUE, f"USDC to receive: ${data['net_payout']}")
-    platform_says(f"Withdrawal {data['status']} → USDC sent to {data['destination_address'][:10]}...")
-    show_json(data, ["withdrawal_id", "amount", "fee", "net_payout", "status"])
+    if withdraw_amount >= Decimal("1.00"):
+        resp = alice.post(f"/agents/{alice.agent_id}/wallet/withdraw", {
+            "amount": str(withdraw_amount),
+            "destination_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18",
+        })
+        if resp.status_code == 201:
+            data = resp.json()
+            agent_says("Alice", BLUE, f"Withdrawal requested: ${data['amount']}")
+            agent_says("Alice", BLUE, f"Fee: ${data['fee']} (covers Base L2 gas)")
+            agent_says("Alice", BLUE, f"USDC to receive: ${data['net_payout']}")
+            platform_says(f"Withdrawal {data['status']} → USDC sent to {data['destination_address'][:10]}...")
+            show_json(data, ["withdrawal_id", "amount", "fee", "net_payout", "status"])
+        elif resp.status_code == 503:
+            agent_says("Alice", BLUE, f"Withdrawals paused (treasury low) — skipping on-chain withdrawal")
+            platform_says("Treasury balance too low for withdrawals — expected in testnet")
+        else:
+            fail(f"Alice withdrawal: unexpected {resp.status_code} — {resp.text}")
+    else:
+        agent_says("Alice", BLUE, f"Balance ${withdraw_amount} below $1.00 minimum — skipping withdrawal")
 
     step(18, "Alice's transaction history")
     txns = expect(alice.get(f"/agents/{alice.agent_id}/wallet/transactions", signed=True), 200, "Transactions")
