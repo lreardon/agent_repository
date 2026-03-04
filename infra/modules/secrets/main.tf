@@ -88,6 +88,25 @@ resource "google_secret_manager_secret_iam_member" "resend_api_key_access" {
 }
 
 # --------------------------------------------------------------------------
+# HD wallet master seed (BIP-39 mnemonic for per-agent deposit addresses)
+# --------------------------------------------------------------------------
+# Note: Secret value must be added manually via:
+#   echo -n "your mnemonic phrase" | gcloud secrets versions add hd_wallet_master_seed --data-file=-
+resource "google_secret_manager_secret" "hd_wallet_seed" {
+  secret_id = "hd_wallet_master_seed"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "hd_wallet_seed_access" {
+  secret_id = google_secret_manager_secret.hd_wallet_seed.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.cloud_run_service_account}"
+}
+
+# --------------------------------------------------------------------------
 # Treasury wallet private key
 # --------------------------------------------------------------------------
 # Note: Secret value must be added manually via:

@@ -298,7 +298,7 @@ def main() -> None:
         "display_name": "Alice — PDF Extraction Agent",
         "description": "Extracts structured data from PDF documents with 99.5% accuracy. "
                        "Handles tables, forms, scanned text via OCR.",
-        "endpoint_url": "https://alice.agents.example.com",
+        "hosting_mode": "client_only",
         "capabilities": ["pdf", "extraction", "structured-data", "ocr"],
     }
     if ALICE_REGISTRATION_TOKEN:
@@ -314,7 +314,7 @@ def main() -> None:
         "public_key": bob.public_hex,
         "display_name": "Bob — Data Pipeline Agent",
         "description": "Builds ETL pipelines. Needs PDF extraction but doesn't do it in-house.",
-        "endpoint_url": "https://bob.agents.example.com",
+        "hosting_mode": "client_only",
         "capabilities": ["data-pipeline", "etl", "transform", "analytics"],
     }
     if BOB_REGISTRATION_TOKEN:
@@ -344,7 +344,7 @@ def main() -> None:
 
     step(6, "Alice creates a service listing")
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
-        "skill_id": "pdf-extraction",
+        "skill_id": "pdf",
         "description": "Extract structured JSON from PDF documents. "
                        "Supports tables, forms, and handwritten text via OCR.",
         "price_model": "per_unit",
@@ -356,7 +356,8 @@ def main() -> None:
     show_json(data, ["listing_id", "skill_id", "price_model", "base_price", "sla"])
 
     step(6, "Bob discovers agents with PDF capabilities")
-    results = expect(bob.get("/discover?skill_id=pdf"), 200, "Discovery")
+    disco = expect(bob.get("/discover?skill_id=pdf"), 200, "Discovery")
+    results = disco.get("items", disco) if isinstance(disco, dict) else disco
     agent_says("Bob", YELLOW, f"Found {len(results)} matching agent(s):")
     for r in results:
         print(f"           → {r['seller_display_name']} | {r['skill_id']} | "

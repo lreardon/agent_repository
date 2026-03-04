@@ -24,6 +24,18 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 
+def delete_where(cur, table: str, col: str, values: tuple) -> int:
+    """Delete rows matching any of the given values. Returns count."""
+    if not values:
+        return 0
+    placeholder = ",".join(["%s"] * len(values))
+    cur.execute(f"DELETE FROM {table} WHERE {col} IN ({placeholder})", values)
+    count = cur.rowcount
+    if count > 0:
+        print(f"  {GREEN}✓ Deleted {count} row(s) from {table}{RESET}")
+    return count
+
+
 def main() -> None:
     print(f"{BOLD}Demo Teardown — Cleaning up demo data{RESET}")
     print(f"{DIM}Connecting to database...{RESET}")
@@ -40,8 +52,7 @@ def main() -> None:
     """, (DEMO_EMAILS,))
     accounts = cur.fetchall()
 
-    agent_ids = [row[1] for row in accounts if row[1] is not None]
-    account_emails = [row[0] for row in accounts]
+    agent_ids = tuple(str(row[1]) for row in accounts if row[1] is not None)
 
     if not accounts:
         print(f"{YELLOW}No demo accounts found. Nothing to clean up.{RESET}")
@@ -51,48 +62,33 @@ def main() -> None:
     print(f"Found {len(accounts)} demo account(s), {len(agent_ids)} agent(s)")
 
     if agent_ids:
-        agent_id_list = tuple(str(aid) for aid in agent_ids)
-        placeholder = ",".join(["%s"] * len(agent_id_list))
+        # Find job IDs for these agents (needed for escrow + review cleanup)
+        placeholder = ",".join(["%s"] * len(agent_ids))
+        cur.execute(f"""
+            SELECT job_id FROM jobs
+            WHERE client_agent_id IN ({placeholder})
+               OR seller_agent_id IN ({placeholder})
+        """, agent_ids + agent_ids)
+        job_ids = tuple(str(row[0]) for row in cur.fetchall())
 
         # Delete in dependency order
-        tables_by_agent = [
-            ("reviews", "reviewer_agent_id"),
-            ("reviews", "reviewed_agent_id"),
-            ("escrows", "job_id", "jobs", "job_id"),  # special: via jobs
-            ("jobs", "buyer_agent_id"),
-            ("jobs", "seller_agent_id"),
-            ("listings", "agent_id"),
-            ("withdrawals", "agent_id"),
-            ("deposits", "agent_id"),
-            ("wallet_balances", "agent_id"),
-            ("deposit_addresses", "agent_id"),
-        ]
+        if job_ids:
+            delete_where(cur, "escrow_audit_log", "escrow_id",
+                         _select_ids(cur, "escrow_accounts", "escrow_id", "job_id", job_ids))
+            delete_where(cur, "escrow_accounts", "job_id", job_ids)
+            delete_where(cur, "reviews", "job_id", job_ids)
 
-        for entry in tables_by_agent:
-            if len(entry) == 2:
-                table, col = entry
-                sql = f"DELETE FROM {table} WHERE {col} IN ({placeholder})"
-                cur.execute(sql, agent_id_list)
-            elif len(entry) == 4:
-                # Join-based delete (e.g., escrows via jobs)
-                table, fk_col, via_table, via_col = entry
-                cur.execute(f"""
-                    DELETE FROM {table} WHERE {fk_col} IN (
-                        SELECT {via_col} FROM {via_table}
-                        WHERE buyer_agent_id IN ({placeholder})
-                           OR seller_agent_id IN ({placeholder})
-                    )
-                """, agent_id_list + agent_id_list)
-            count = cur.rowcount
-            if count > 0:
-                print(f"  {GREEN}✓ Deleted {count} row(s) from {table}{RESET}")
+        delete_where(cur, "jobs", "client_agent_id", agent_ids)
+        delete_where(cur, "jobs", "seller_agent_id", agent_ids)
+        delete_where(cur, "listings", "seller_agent_id", agent_ids)
+        delete_where(cur, "withdrawal_requests", "agent_id", agent_ids)
+        delete_where(cur, "deposit_transactions", "agent_id", agent_ids)
+        delete_where(cur, "deposit_addresses", "agent_id", agent_ids)
 
         # Null out account agent references before deleting agents
         cur.execute("UPDATE accounts SET agent_id = NULL WHERE email = ANY(%s)", (DEMO_EMAILS,))
 
-        # Delete agents
-        cur.execute(f"DELETE FROM agents WHERE agent_id IN ({placeholder})", agent_id_list)
-        print(f"  {GREEN}✓ Deleted {cur.rowcount} agent(s){RESET}")
+        delete_where(cur, "agents", "agent_id", agent_ids)
 
     # Delete verifications and accounts
     cur.execute("DELETE FROM email_verifications WHERE email = ANY(%s)", (DEMO_EMAILS,))
@@ -114,6 +110,15 @@ def main() -> None:
         print(f"  {GREEN}✓ Removed .env.demo{RESET}")
 
     print(f"\n{GREEN}{BOLD}✓ Teardown complete!{RESET}")
+
+
+def _select_ids(cur, table: str, id_col: str, match_col: str, values: tuple) -> tuple:
+    """Helper: select IDs from a table matching given values."""
+    if not values:
+        return ()
+    placeholder = ",".join(["%s"] * len(values))
+    cur.execute(f"SELECT {id_col} FROM {table} WHERE {match_col} IN ({placeholder})", values)
+    return tuple(str(row[0]) for row in cur.fetchall())
 
 
 if __name__ == "__main__":

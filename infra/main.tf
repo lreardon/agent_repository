@@ -151,6 +151,13 @@ resource "google_project_iam_member" "api_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.cloud_run_api.email}"
 }
 
+# GKE access — required for sandbox verification (K8s Jobs)
+resource "google_project_iam_member" "api_container_developer" {
+  project = var.project_id
+  role    = "roles/container.developer"
+  member  = "serviceAccount:${google_service_account.cloud_run_api.email}"
+}
+
 # --------------------------------------------------------------------------
 # Artifact Registry
 # --------------------------------------------------------------------------
