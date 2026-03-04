@@ -1,6 +1,6 @@
 # Database Backup & Recovery Strategy
 
-**Last updated:** 2025-07-27
+**Last updated:** 2026-03-03
 **Applies to:** Cloud SQL PostgreSQL 16 (`agent-registry-{environment}`)
 
 ---
@@ -12,8 +12,8 @@
 | Automated backups | ✅ Enabled | ✅ Enabled |
 | Backup window | 03:00 UTC | 03:00 UTC |
 | Retained backups | 7 | 30 |
-| Point-in-time recovery (PITR) | ❌ Off | ✅ Enabled |
-| WAL retention (for PITR) | 1 day | 7 days |
+| Point-in-time recovery (PITR) | ✅ Enabled | ✅ Enabled |
+| WAL retention (for PITR) | 2 days | 7 days |
 | Availability | Zonal | Regional (HA) |
 | Disk | PD-SSD, autoresize | PD-SSD, autoresize |
 | Deletion protection | ✅ On | ✅ On |
@@ -62,9 +62,9 @@ gcloud sql backups restore BACKUP_ID \
 4. Check treasury balance matches on-chain state
 5. Restart Cloud Run to clear any stale connection pools: `gcloud run services update agent-registry-api-production --region=us-west1`
 
-### 2. Point-in-Time Recovery (Production Only)
+### 2. Point-in-Time Recovery
 
-Use when: you know the exact moment something went wrong (accidental DELETE, bad migration, etc.) and want to recover to just before it.
+Use when: you know the exact moment something went wrong (accidental DELETE, bad migration, etc.) and want to recover to just before it. Available on both staging (2-day window) and production (7-day window).
 
 ```bash
 # Restore to a specific timestamp (UTC)

@@ -43,8 +43,8 @@ resource "google_sql_database_instance" "main" {
     backup_configuration {
       enabled                        = true
       start_time                     = "03:00"
-      point_in_time_recovery_enabled = var.environment == "production"
-      transaction_log_retention_days = var.environment == "production" ? 7 : 1
+      point_in_time_recovery_enabled = true
+      transaction_log_retention_days = var.environment == "production" ? 7 : 2
       backup_retention_settings {
         retained_backups = var.environment == "production" ? 30 : 7
         retention_unit   = "COUNT"
