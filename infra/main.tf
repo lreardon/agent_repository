@@ -111,10 +111,10 @@ module "database" {
 module "redis" {
   source = "./modules/redis"
 
-  project_id       = var.project_id
-  region           = var.region
-  environment      = var.environment
-  memory_size_gb   = var.redis_memory_size_gb
+  project_id         = var.project_id
+  region             = var.region
+  environment        = var.environment
+  memory_size_gb     = var.redis_memory_size_gb
   authorized_network = module.networking.vpc_id
 
   depends_on = [module.networking]
@@ -243,20 +243,20 @@ resource "google_gke_hub_membership" "sandbox" {
 module "cloud_run" {
   source = "./modules/cloud-run"
 
-  project_id            = var.project_id
-  region                = var.region
-  environment           = var.environment
-  image                 = var.cloud_run_image
-  service_account_email = google_service_account.cloud_run_api.email
-  vpc_connector_id      = module.networking.vpc_connector_id
-  cloud_sql_connection  = module.database.connection_name
-  db_password_secret_id = module.secrets.db_password_secret_id
-  signing_key_secret_id      = module.secrets.signing_key_secret_id
+  project_id               = var.project_id
+  region                   = var.region
+  environment              = var.environment
+  image                    = var.cloud_run_image
+  service_account_email    = google_service_account.cloud_run_api.email
+  vpc_connector_id         = module.networking.vpc_connector_id
+  cloud_sql_connection     = module.database.connection_name
+  db_password_secret_id    = module.secrets.db_password_secret_id
+  signing_key_secret_id    = module.secrets.signing_key_secret_id
   resend_api_key_secret_id = module.secrets.resend_api_key_secret_id
-  redis_host            = module.redis.host
-  redis_port            = module.redis.port
-  redis_auth_string     = module.redis.auth_string
-  base_url              = var.base_url
+  redis_host               = module.redis.host
+  redis_port               = module.redis.port
+  redis_auth_string        = module.redis.auth_string
+  base_url                 = var.base_url
   min_instances            = var.cloud_run_min_instances
   max_instances            = var.cloud_run_max_instances
   sandbox_gke_cluster      = module.gke.cluster_name

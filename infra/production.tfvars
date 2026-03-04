@@ -21,3 +21,4 @@ treasury_wallet_address = ""
 
 # Blockchain
 blockchain_network = "base_mainnet"
+

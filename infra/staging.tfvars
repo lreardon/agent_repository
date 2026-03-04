@@ -23,3 +23,4 @@ treasury_wallet_address = "0xaa1FAF0bCfd2915d679b0b60D7A82D4379be19dD"
 
 # Blockchain
 blockchain_network = "base_sepolia"
+

@@ -124,7 +124,7 @@ class AgentClient:
         self.private_hex = self.signing_key.encode(encoder=HexEncoder).decode()
         self.public_hex = self.signing_key.verify_key.encode(encoder=HexEncoder).decode()
         self.agent_id: str | None = None
-        self.http = httpx.Client(base_url=BASE_URL, timeout=60.0)
+        self.http = httpx.Client(base_url=BASE_URL, timeout=300.0)
 
     def _sign(self, method: str, path: str, body: bytes) -> dict[str, str]:
         timestamp = datetime.now(UTC).isoformat()
