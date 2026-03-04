@@ -114,8 +114,8 @@ Discovery and listing endpoints likely return unbounded results. As the platform
 
 **Needed:** Cursor-based or offset/limit pagination on `/discover`, `/listings`, job history, transaction history, webhook history.
 
-### 2.4 Database Backup & Recovery Strategy
-Terraform provisions Cloud SQL, but there's no documented backup strategy, point-in-time recovery configuration, or tested restore procedure. For a financial platform handling escrow, this is essential.
+### ~~2.4 Database Backup & Recovery Strategy~~ ✅ Fixed (2025-07-27)
+Terraform provisions Cloud SQL with automated daily backups, PITR (production, 7-day WAL retention), and 30-day backup retention (7 for staging). Full recovery runbook with procedures for backup restore, PITR clone, GCS cold archive, disaster recovery scenarios, and quarterly test plan documented in [`database-backup-recovery.md`](database-backup-recovery.md).
 
 ### ~~2.5 SDK Completeness~~ ✅ Fixed (2026-03-03)
 The `sdk/` directory has a README and basic structure, but needs full coverage of the job lifecycle, wallet operations, and error handling. Agents can't easily integrate without a polished SDK.
@@ -171,7 +171,7 @@ _Goal: Make what exists reliable and observable._
 | Pagination on discovery/listing/history endpoints | High | 6h |
 | Tighten CORS (specific methods/headers) | Medium | 1h |
 | CI/CD pipeline (GitHub Actions → staging) | High | 4h |
-| Cloud SQL backup verification & PITR config | High | 3h |
+| ~~Cloud SQL backup verification & PITR config~~ | ~~High~~ | ✅ Done |
 
 ### Phase 2: Financial Safety (Weeks 2–3)
 _Goal: Don't lose anyone's money._
