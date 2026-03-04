@@ -67,3 +67,9 @@ variable "base_url" {
   description = "Public base URL for the API (used for email verification links, webhooks, etc.)"
   type        = string
 }
+
+variable "treasury_wallet_address" {
+  description = "Treasury wallet public address for balance monitoring"
+  type        = string
+  default     = ""
+}

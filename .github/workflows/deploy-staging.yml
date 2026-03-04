@@ -9,10 +9,12 @@ env:
   REGION: us-west1
   SERVICE: agent-registry-staging
   REPO: agent-registry
+  TF_VAR_FILE: staging.tfvars
 
 permissions:
   contents: read
-  id-token: write  # Required for Workload Identity Federation
+  id-token: write
+  pull-requests: write
 
 jobs:
   test:
@@ -62,8 +64,41 @@ jobs:
           REQUIRE_AGENT_CARD: "false"
         run: pytest --tb=short -q
 
-  deploy:
+  infra:
     needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Select workspace
+        working-directory: infra
+        run: terraform workspace select staging || terraform workspace new staging
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: terraform plan -var-file="${TF_VAR_FILE}" -out=tfplan -input=false
+
+      - name: Terraform Apply
+        working-directory: infra
+        run: terraform apply -input=false tfplan
+
+  deploy:
+    needs: [test, infra]
     runs-on: ubuntu-latest
 
     steps:
@@ -94,6 +129,17 @@ jobs:
           image: ${{ env.IMAGE }}
           region: ${{ env.REGION }}
 
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe ${SERVICE} --region=${REGION} --format='value(status.url)')
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/health")
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Health check returned $STATUS"
+            curl -s "${URL}/health" | jq .
+            exit 1
+          fi
+          echo "✅ Health check passed"
+
   deploy-docs:
     needs: test
     runs-on: ubuntu-latest
@@ -118,12 +164,8 @@ jobs:
       - name: Deploy to Firebase Hosting
         run: |
           SITE_ID="${PROJECT_ID}-staging"
-
-          # Substitute placeholders in config files
           sed -i "s/\\\$PROJECT_ID/${PROJECT_ID}/g" .firebaserc
           sed -i 's/\$FIREBASE_SITE_ID/'"${SITE_ID}"'/g' firebase.json
-
-          # Deploy only the hosting site
           firebase deploy --only hosting --project="${PROJECT_ID}"
         env:
           FIREBASE_CLI_EXPERIMENTS: webframeworks

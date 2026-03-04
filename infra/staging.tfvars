@@ -17,3 +17,6 @@ cloud_run_max_instances = 2
 
 # API base URL
 base_url = "https://api.staging.arcoa.ai"
+
+# Treasury Wallet
+treasury_wallet_address = "0x961fb2d7fF9d3A77a09b47EFF17cFCd298C3AB66"

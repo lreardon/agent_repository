@@ -5,12 +5,22 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, FastAPI
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
+from app.logging_config import setup_logging, RequestContextMiddleware
+from app.redis import get_redis
 from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet, webhooks, ws
+
+from app.config import settings as _settings
+setup_logging(_settings.env)
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +130,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await _recover_wallet_tasks()
     await _recover_deadlines()
 
+    # Start metrics gauge updater
+    from app.metrics import run_metrics_updater
+    metrics_task = asyncio.create_task(run_metrics_updater())
+
     yield
+
+    # Cleanup metrics updater
+    metrics_task.cancel()
+    try:
+        await metrics_task
+    except asyncio.CancelledError:
+        pass
 
     # Cleanup: first drain in-flight wallet tasks, then cancel background loops
     from app.services.task_registry import registry
@@ -142,6 +163,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Prometheus metrics
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator(
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
 # CORS - restrict to configured origins
 from app.config import settings
 app.add_middleware(
@@ -153,7 +180,11 @@ app.add_middleware(
 )
 
 # Middleware (order matters — outermost first)
+if settings.env not in ("development", "test"):
+    from app.error_reporting import ErrorReportingMiddleware
+    app.add_middleware(ErrorReportingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
 
 # ---------------------------------------------------------------------------
@@ -190,7 +221,36 @@ if static_dir.exists():
 
 
 @app.get("/health")
-async def health() -> dict:
-    """Health check endpoint."""
+async def health(
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+) -> JSONResponse:
+    """Deep health check — tests DB and Redis connectivity."""
+    import asyncio as _asyncio
     from app.services.task_registry import registry
-    return {"status": "ok", "in_flight_tasks": registry.active_count}
+
+    components: dict[str, str] = {}
+
+    # DB check
+    try:
+        async with _asyncio.timeout(2):
+            await db.execute(text("SELECT 1"))
+        components["database"] = "ok"
+    except Exception:
+        components["database"] = "unavailable"
+
+    # Redis check
+    try:
+        async with _asyncio.timeout(2):
+            await redis.ping()
+        components["redis"] = "ok"
+    except Exception:
+        components["redis"] = "unavailable"
+
+    all_ok = all(v == "ok" for v in components.values())
+    body = {
+        "status": "healthy" if all_ok else "unhealthy",
+        "components": components,
+        "in_flight_tasks": registry.active_count,
+    }
+    return JSONResponse(content=body, status_code=200 if all_ok else 503)

@@ -90,6 +90,12 @@ variable "sandbox_service_account" {
   default     = ""
 }
 
+variable "treasury_wallet_address" {
+  description = "Treasury wallet public address for balance monitoring"
+  type        = string
+  default     = ""
+}
+
 # --------------------------------------------------------------------------
 # Cloud Run service
 # --------------------------------------------------------------------------
@@ -235,6 +241,11 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "EMAIL_VERIFICATION_REQUIRED"
         value = "true"
+      }
+
+      env {
+        name  = "TREASURY_WALLET_ADDRESS"
+        value = var.treasury_wallet_address
       }
 
       startup_probe {

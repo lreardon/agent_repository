@@ -16,3 +16,5 @@ cloud_run_max_instances = 10
 
 # API base URL (update when custom domain is configured)
 base_url = "https://api.arcoa.ai"
+
+treasury_wallet_address = ""

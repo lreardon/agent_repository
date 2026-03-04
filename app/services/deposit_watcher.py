@@ -236,6 +236,20 @@ async def run_deposit_watcher() -> None:
                     # Update last scanned block
                     await _update_last_scanned_block(scan_to)
 
+                    # Record scan timestamp for metrics lag gauge
+                    try:
+                        import time as _time
+                        import redis.asyncio as _aioredis
+                        from app.redis import redis_pool as _redis_pool
+                        from app.metrics import DEPOSIT_WATCHER_LAST_SCAN_KEY
+                        _r = _aioredis.Redis(connection_pool=_redis_pool)
+                        try:
+                            await _r.set(DEPOSIT_WATCHER_LAST_SCAN_KEY, str(_time.time()))
+                        finally:
+                            await _r.aclose()
+                    except Exception:
+                        pass  # metrics are best-effort
+
                     if deposits_found > 0:
                         logger.info(
                             "Scanned blocks %s-%s: found %d deposits",

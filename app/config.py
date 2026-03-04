@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     blockchain_network: str = "base_sepolia"  # "base_sepolia" or "base_mainnet"
     blockchain_rpc_url: str = ""  # Auto-set from network if empty
     treasury_wallet_private_key: str = ""  # Required for withdrawal processing
+    treasury_wallet_address: str = ""  # Public address for balance monitoring (no private key needed)
     hd_wallet_master_seed: str = ""  # BIP-39 mnemonic for per-agent deposit addresses
     usdc_contract_address: str = ""  # Auto-set from network if empty
     min_deposit_amount: Decimal = Decimal("0.01")

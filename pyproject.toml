@@ -23,6 +23,10 @@ dependencies = [
     "kubernetes>=29.0.0",
     "google-auth>=2.27.0",
     "google-cloud-container>=2.40.0",
+    "structlog>=24.1.0",
+    "google-cloud-error-reporting>=1.11.0",
+    "prometheus-client>=0.20.0",
+    "prometheus-fastapi-instrumentator>=7.0.0",
 ]
 
 [project.optional-dependencies]

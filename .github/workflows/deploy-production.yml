@@ -1,0 +1,109 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy (must have passed staging)"
+        required: true
+        type: string
+      skip_infra:
+        description: "Skip Terraform apply (app-only deploy)"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: us-west1
+  SERVICE: agent-registry-api-production
+  REPO: agent-registry
+  TF_VAR_FILE: production.tfvars
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  infra:
+    if: ${{ !inputs.skip_infra }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Select workspace
+        working-directory: infra
+        run: terraform workspace select production || terraform workspace new production
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: terraform plan -var-file="${TF_VAR_FILE}" -out=tfplan -input=false
+
+      - name: Terraform Apply
+        working-directory: infra
+        run: terraform apply -input=false tfplan
+
+  deploy:
+    needs: infra
+    if: ${{ always() && (needs.infra.result == 'success' || needs.infra.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/api:${GITHUB_SHA}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          image: ${{ env.IMAGE }}
+          region: ${{ env.REGION }}
+
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe ${SERVICE} --region=${REGION} --format='value(status.url)')
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/health")
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Health check returned $STATUS"
+            curl -s "${URL}/health" | jq .
+            exit 1
+          fi
+          echo "✅ Health check passed"

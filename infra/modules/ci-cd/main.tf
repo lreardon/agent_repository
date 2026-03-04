@@ -51,6 +51,12 @@ locals {
     "roles/cloudbuild.builds.editor",
     "roles/iam.serviceAccountUser",
     "roles/firebasehosting.admin",
+    # Terraform needs broad read + write for managed resources
+    "roles/editor",
+    # Terraform needs to manage IAM bindings
+    "roles/resourcemanager.projectIamAdmin",
+    # Terraform state in GCS
+    "roles/storage.objectAdmin",
   ]
 }
 
