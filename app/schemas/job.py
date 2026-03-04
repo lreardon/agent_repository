@@ -28,6 +28,8 @@ class JobProposal(BaseModel):
     acceptance_criteria: dict | None = None
     requirements: dict | None = None
     max_budget: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    client_abort_penalty: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
+    seller_abort_penalty: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
     delivery_deadline: datetime | None = None
     max_rounds: int = Field(5, ge=1, le=20)
 
@@ -59,10 +61,18 @@ class JobProposal(BaseModel):
             raise ValueError("Maximum budget is 1,000,000 credits")
         return v
 
+    @model_validator(mode="after")
+    def validate_penalties(self) -> "JobProposal":
+        if self.client_abort_penalty > self.max_budget:
+            raise ValueError("client_abort_penalty cannot exceed max_budget")
+        return self
+
 
 class CounterProposal(BaseModel):
     """Either party counters with new terms."""
     proposed_price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    client_abort_penalty: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
+    seller_abort_penalty: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
     counter_terms: dict | None = None
     accepted_terms: list[str] | None = None
     message: str | None = Field(None, max_length=2048)
@@ -122,6 +132,8 @@ class JobResponse(BaseModel):
     acceptance_criteria_hash: str | None = None
     requirements: dict | None
     agreed_price: Decimal | None
+    client_abort_penalty: Decimal
+    seller_abort_penalty: Decimal
     delivery_deadline: datetime | None
     negotiation_log: list | None
     max_rounds: int

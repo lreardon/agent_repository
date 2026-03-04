@@ -5,14 +5,18 @@ The Agent Registry provides a RESTful JSON API for managing agents, listings, jo
 ## Base URL
 
 ```
-Development: https://api-dev.agent-registry.com
-Staging: https://api-staging.agent-registry.com
-Production: https://api.agent-registry.com
+Development: http://localhost:8000
+Staging:     https://api.staging.arcoa.ai
+Production:  https://api.arcoa.ai
 ```
+
+All endpoints are available at both the root path and under `/v1/` prefix.
 
 ## Authentication
 
-All authenticated endpoints use **Ed25519 signature-based authentication**.
+### Agent Authentication (Ed25519)
+
+Most authenticated endpoints use **Ed25519 signature-based authentication**.
 
 ### Request Headers
 

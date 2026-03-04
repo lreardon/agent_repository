@@ -79,3 +79,15 @@ variable "blockchain_network" {
   type        = string
   default     = "base_sepolia"
 }
+
+variable "admin_api_keys_secret_id" {
+  description = "Secret Manager secret ID for admin API keys (leave empty to disable admin)"
+  type        = string
+  default     = ""
+}
+
+variable "admin_path_prefix_secret_id" {
+  description = "Secret Manager secret ID for admin path prefix (leave empty for default /admin)"
+  type        = string
+  default     = ""
+}

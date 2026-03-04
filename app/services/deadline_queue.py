@@ -85,10 +85,10 @@ async def run_deadline_consumer() -> None:
 
 
 async def _fail_overdue_job(job_id: uuid.UUID) -> None:
-    """Fail a single overdue job and refund escrow."""
+    """Fail a single overdue job, apply seller penalty, and refund client."""
     from app.database import async_session_factory
     from app.models.job import Job, JobStatus
-    from app.services.escrow import refund_escrow
+    from app.services.escrow import abort_job
     from sqlalchemy import select
 
     try:
@@ -112,11 +112,9 @@ async def _fail_overdue_job(job_id: uuid.UUID) -> None:
                 )
                 return
 
-            job.status = JobStatus.FAILED
-            await db.flush()
-            await refund_escrow(db, job.job_id)
-            await db.commit()
-            logger.info("Auto-failed overdue job %s", job_id)
+            # Use abort_job with is_deadline=True — forfeits seller bond to client
+            await abort_job(db, job.job_id, job.seller_agent_id, is_deadline=True)
+            logger.info("Auto-failed overdue job %s (seller bond forfeited)", job_id)
 
     except Exception:
         logger.exception("Failed to enforce deadline for job %s", job_id)

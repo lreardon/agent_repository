@@ -27,6 +27,11 @@ class EscrowAction(enum.Enum):
     REFUNDED = "refunded"
     DISPUTED = "disputed"
     RESOLVED = "resolved"
+    SELLER_BOND_FUNDED = "seller_bond_funded"
+    ABORT_CLIENT = "abort_client"
+    ABORT_SELLER = "abort_seller"
+    BOND_FORFEITED = "bond_forfeited"
+    BOND_RETURNED = "bond_returned"
 
 
 class EscrowAccount(Base):
@@ -45,6 +50,9 @@ class EscrowAccount(Base):
         Uuid, ForeignKey("agents.agent_id", ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    seller_bond_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0.00")
+    )
     status: Mapped[EscrowStatus] = mapped_column(
         Enum(EscrowStatus, values_callable=lambda x: [e.value for e in x]),
         nullable=False,

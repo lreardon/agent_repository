@@ -607,3 +607,116 @@ async def test_transaction_history_empty(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json()["deposits"] == []
     assert resp.json()["withdrawals"] == []
+
+
+# ---------------------------------------------------------------------------
+# Withdrawal idempotency (double-send prevention)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_process_withdrawal_idempotent_with_existing_tx_hash(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """If a withdrawal already has a tx_hash (from a pre-crash send), recovery should
+    check on-chain status instead of sending a duplicate transaction."""
+    from app.services.wallet import _process_withdrawal
+
+    # Create agent via API, deposit funds, then manipulate DB state
+    agent_id, priv = await _create_agent(client)
+    await _deposit(client, agent_id, priv, "10.00")
+
+    # Deduct balance (simulating the withdrawal deduction that already happened)
+    agent_result = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    agent = agent_result.scalar_one()
+    agent.balance = Decimal("0.00")
+
+    # Create a PROCESSING withdrawal with an existing tx_hash (simulating crash after send)
+    withdrawal = WithdrawalRequest(
+        withdrawal_id=uuid.uuid4(),
+        agent_id=uuid.UUID(agent_id),
+        amount=Decimal("10.00"),
+        fee=Decimal("0.50"),
+        net_payout=Decimal("9.50"),
+        destination_address=VALID_ETH_ADDRESS,
+        status=WithdrawalStatus.PROCESSING,
+        tx_hash="0x" + "ff" * 32,
+    )
+    db_session.add(withdrawal)
+    await db_session.commit()
+
+    withdrawal_id = withdrawal.withdrawal_id
+
+    # Mock _check_existing_tx to return "completed" (tx mined successfully)
+    with patch("app.services.wallet._check_existing_tx", new_callable=AsyncMock, return_value="completed"), \
+         patch("app.services.secrets.get_treasury_key", return_value="0x" + "aa" * 32), \
+         patch("app.database.async_session", return_value=db_session):
+        db_session.__aenter__ = AsyncMock(return_value=db_session)
+        db_session.__aexit__ = AsyncMock(return_value=False)
+
+        await _process_withdrawal(withdrawal_id)
+
+    # Withdrawal should be COMPLETED, not re-sent
+    wd_result = await db_session.execute(
+        select(WithdrawalRequest).where(WithdrawalRequest.withdrawal_id == withdrawal_id)
+    )
+    wd = wd_result.scalar_one()
+    assert wd.status == WithdrawalStatus.COMPLETED
+    assert wd.processed_at is not None
+    # Agent balance should NOT have been refunded (tx succeeded)
+    agent_result2 = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    assert agent_result2.scalar_one().balance == Decimal("0.00")
+
+
+@pytest.mark.asyncio
+async def test_process_withdrawal_idempotent_failed_tx(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """If existing tx_hash reverted on-chain, refund the agent."""
+    from app.services.wallet import _process_withdrawal
+
+    agent_id, priv = await _create_agent(client)
+    await _deposit(client, agent_id, priv, "10.00")
+
+    agent_result = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    agent = agent_result.scalar_one()
+    agent.balance = Decimal("0.00")
+
+    withdrawal = WithdrawalRequest(
+        withdrawal_id=uuid.uuid4(),
+        agent_id=uuid.UUID(agent_id),
+        amount=Decimal("10.00"),
+        fee=Decimal("0.50"),
+        net_payout=Decimal("9.50"),
+        destination_address=VALID_ETH_ADDRESS,
+        status=WithdrawalStatus.PROCESSING,
+        tx_hash="0x" + "ee" * 32,
+    )
+    db_session.add(withdrawal)
+    await db_session.commit()
+
+    withdrawal_id = withdrawal.withdrawal_id
+
+    with patch("app.services.wallet._check_existing_tx", new_callable=AsyncMock, return_value="failed"), \
+         patch("app.services.secrets.get_treasury_key", return_value="0x" + "aa" * 32), \
+         patch("app.database.async_session", return_value=db_session):
+        db_session.__aenter__ = AsyncMock(return_value=db_session)
+        db_session.__aexit__ = AsyncMock(return_value=False)
+
+        await _process_withdrawal(withdrawal_id)
+
+    wd_result = await db_session.execute(
+        select(WithdrawalRequest).where(WithdrawalRequest.withdrawal_id == withdrawal_id)
+    )
+    assert wd_result.scalar_one().status == WithdrawalStatus.FAILED
+    # Agent should be refunded the full amount
+    agent_result2 = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    assert agent_result2.scalar_one().balance == Decimal("10.00")

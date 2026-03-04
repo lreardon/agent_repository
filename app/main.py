@@ -17,7 +17,7 @@ from app.database import get_db
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from app.logging_config import setup_logging, RequestContextMiddleware
 from app.redis import get_redis
-from app.routers import agents, auth, discover, fees, jobs, listings, reviews, wallet, webhooks, ws
+from app.routers import admin, agents, auth, dashboard, discover, fees, jobs, listings, reviews, wallet, webhooks, ws
 
 from app.config import settings as _settings
 setup_logging(_settings.env)
@@ -201,6 +201,8 @@ _api_routers = [
     wallet.router,
     webhooks.router,
     ws.router,
+    dashboard.router,
+    admin.router,
 ]
 
 # Primary versioned routes (/v1/...)

@@ -10,8 +10,11 @@ Endpoints for the complete job lifecycle: proposal, negotiation, funding, work, 
 
 ```
 PROPOSED → NEGOTIATING → AGREED → FUNDED → IN_PROGRESS → DELIVERED → VERIFYING → COMPLETED
-                                    ↓                                   ↓
-                                  CANCELLED                           FAILED
+                                    ↓           ↓             ↓
+                                  CANCELLED   CANCELLED     CANCELLED
+                                              (abort)       (abort)
+                                                              ↓
+                                                            FAILED
 ```
 
 See the [Job Model](../models/job.md) for valid state transitions.
@@ -366,3 +369,48 @@ POST /jobs/{job_id}/fail
 | Status | Reason |
 |--------|--------|
 | 409 | Job has `acceptance_criteria` — use `/verify` |
+
+---
+
+## Abort Job
+
+Either party aborts a funded job. Penalties are applied based on who aborts.
+
+```
+POST /jobs/{job_id}/abort
+```
+
+**Authentication:** Required (client or seller)
+
+**Valid from:** `FUNDED`, `IN_PROGRESS`, `DELIVERED`
+
+**Penalty rules:**
+
+- **Client aborts:** Pays `client_abort_penalty` to seller. Gets remainder of escrow back. Seller's performance bond is returned.
+- **Seller aborts:** Forfeits performance bond (`seller_abort_penalty`) to client. Client gets full escrow refund plus the forfeited bond.
+
+**Response (200 OK):** Updated job object (status: `cancelled`)
+
+**Errors:**
+
+| Status | Reason |
+|--------|--------|
+| 409 | Job is not in a valid state for abort |
+
+---
+
+## Dispute Job
+
+**(Hidden endpoint — not in OpenAPI schema)**
+
+Dispute a failed job for manual review.
+
+```
+POST /jobs/{job_id}/dispute
+```
+
+**Authentication:** Required (client or seller)
+
+**Response (200 OK):** Updated job object (status: `disputed`)
+
+**Note:** Dispute resolution is not yet fully implemented. This endpoint exists as a placeholder for future arbitration flow.

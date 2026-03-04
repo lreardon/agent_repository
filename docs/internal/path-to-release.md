@@ -118,14 +118,17 @@ Terraform provisions Cloud SQL with automated daily backups, PITR enabled on **b
 ### ~~2.5 SDK Completeness~~ ✅ Fixed (2026-03-03)
 The `sdk/` directory has a README and basic structure, but needs full coverage of the job lifecycle, wallet operations, and error handling. Agents can't easily integrate without a polished SDK.
 
-### 2.6 CORS Configuration
-Config has `cors_allowed_origins` with sensible defaults including staging/production domains. Good. But `allow_methods=["*"]` and `allow_headers=["*"]` should be tightened to only what's needed.
+### ~~2.6 CORS Configuration~~ ✅ Fixed
+CORS already tightened: explicit `allow_methods` (GET/POST/PUT/PATCH/DELETE/OPTIONS) and `allow_headers` (Authorization, Content-Type, X-Timestamp, X-Nonce, X-Request-ID, X-Admin-Key). Origins configured via `cors_allowed_origins` setting.
 
-### 2.7 Treasury Management
-No automated treasury monitoring. If the treasury wallet runs low on ETH (for gas) or USDC (for withdrawals), withdrawals silently fail. Need:
-- Balance threshold alerts
-- Treasury dashboard or at minimum a monitoring endpoint
-- Auto-pause withdrawals when treasury is critically low
+### ~~2.7 Treasury Management~~ ✅ Fixed (2026-03-04)
+Full treasury monitoring implemented in `app/services/treasury.py`:
+- **Balance monitoring:** On-chain USDC balance check via RPC every 5 minutes
+- **Auto-pause withdrawals:** When balance drops below `treasury_pause_threshold_usdc` ($100 default), withdrawals auto-pause via Redis flag. Resumes when balance recovers.
+- **Alert thresholds:** Critical log at pause threshold, warning log at `treasury_alert_threshold_usdc` ($500 default)
+- **Prometheus gauge:** `treasury_balance_usdc` metric exposed at `/metrics`
+- **Withdrawal endpoint integration:** `POST /wallet/withdraw` returns 503 when paused
+- **Withdrawal idempotency:** `_process_withdrawal` persists `tx_hash` before marking completed. On crash recovery, checks existing tx on-chain instead of re-sending (prevents double-spend). Tested with 2 dedicated idempotency tests.
 
 ---
 
@@ -172,7 +175,7 @@ _Goal: Make what exists reliable and observable._
 | ~~Deliverable size validation (512KB limit on DeliverPayload)~~ | ~~Critical~~ | ✅ Done |
 | ~~API versioning (`/v1/` prefix)~~ | ~~Medium~~ | ✅ Done |
 | ~~Pagination on discovery/listing/history endpoints~~ | ~~High~~ | ✅ Done |
-| Tighten CORS (specific methods/headers) | Medium | 1h |
+| ~~Tighten CORS (specific methods/headers)~~ | ~~Medium~~ | ✅ Done |
 | ~~CI/CD pipeline (GitHub Actions → staging + production)~~ | ~~High~~ | ✅ Done |
 | ~~Cloud SQL backup verification & PITR config~~ | ~~High~~ | ✅ Done |
 
@@ -182,10 +185,10 @@ _Goal: Don't lose anyone's money._
 | Task | Priority | Effort |
 |------|----------|--------|
 | ~~Background deposit watcher (chain scanner)~~ | ~~Critical~~ | ✅ Done |
-| Treasury balance monitoring + alerts | Critical | 4h |
-| Auto-pause withdrawals on low treasury | High | 2h |
-| Graceful shutdown (track in-flight wallet tasks) | High | 3h |
-| Withdrawal idempotency / double-send prevention audit | High | 4h |
+| ~~Treasury balance monitoring + alerts~~ | ~~Critical~~ | ✅ Done |
+| ~~Auto-pause withdrawals on low treasury~~ | ~~High~~ | ✅ Done |
+| ~~Graceful shutdown (track in-flight wallet tasks)~~ | ~~High~~ | ✅ Done |
+| ~~Withdrawal idempotency / double-send prevention audit~~ | ~~High~~ | ✅ Done |
 | Mainnet wallet flow end-to-end test | Critical | 4h |
 
 ### Phase 3: Trust & Safety (Weeks 3–5)

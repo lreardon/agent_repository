@@ -8,6 +8,7 @@ import base64
 import json
 import os
 import shutil
+from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
@@ -157,19 +158,22 @@ if len(data) < 100:
     headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_bytes)
     await client.post(f"/jobs/{job_id}/deliver", content=deliver_bytes, headers={**headers, "Content-Type": "application/json"})
 
-    # Verify — should fail
+    # Verify — should fail but return to in_progress (retry allowed)
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/verify", b"")
     resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["job"]["status"] == "failed"
+    assert data["job"]["status"] == "in_progress"  # Not failed — seller can redeliver
     assert data["verification"]["passed"] is False
     assert "Need 100+" in data["verification"]["sandbox"]["stderr"]
+    assert data["retry_allowed"] is True
 
-    # Client refunded
+    # Client's verification fee was refunded (charged to seller instead)
+    # Escrow is still held — job isn't terminated
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "500.00"
+    # Client paid 100 for escrow, verification fee refunded → balance = 400
+    assert Decimal(resp.json()["balance"]) == Decimal("400.00")
 
 
 @pytest.mark.asyncio

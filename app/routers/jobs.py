@@ -10,6 +10,7 @@ from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
 from app.redis import get_redis
+from app.models.job import JobStatus
 from app.schemas.job import AcceptJob, CounterProposal, DeliverPayload, JobProposal, JobResponse, VerifyResponse
 from app.schemas.escrow import EscrowResponse
 from app.services import escrow as escrow_service
@@ -223,13 +224,20 @@ async def verify_job(
             seller_agent = seller_row.scalar_one()
             if seller_agent.balance >= verify_fee.amount:
                 seller_agent.balance -= verify_fee.amount
-            job = await job_service.fail_job(db, job_id, auth.agent_id)
+
+            # Return to IN_PROGRESS — seller can redeliver until deadline
+            job.status = JobStatus.IN_PROGRESS
+            await db.commit()
+            await db.refresh(job)
 
         resp = VerifyResponse(
             job=JobResponse.model_validate(job),
             verification=verification,
         )
-        return {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
+        result_dict = {**resp.model_dump(mode="json"), "fee_charged": verify_fee.to_dict()}
+        if not suite_result.passed:
+            result_dict["retry_allowed"] = True
+        return result_dict
     finally:
         await redis.delete(lock_key)
 
@@ -254,6 +262,34 @@ async def fail_job(
             detail="This job has acceptance criteria. Use POST /jobs/{job_id}/verify to run verification.",
         )
     job = await job_service.fail_job(db, job_id, auth.agent_id)
+    return JobResponse.model_validate(job)
+
+
+@router.post("/{job_id}/abort", response_model=JobResponse, dependencies=[Depends(check_rate_limit)])
+async def abort_job(
+    job_id: uuid.UUID,
+    auth: AuthenticatedAgent = Depends(verify_request),
+    db: AsyncSession = Depends(get_db),
+) -> JobResponse:
+    """Abort a funded job. Either party can abort.
+
+    Penalties are applied based on who aborts:
+    - Client aborts: pays client_abort_penalty to seller, gets remainder back.
+      Seller's performance bond is returned.
+    - Seller aborts: loses performance bond (seller_abort_penalty) to client.
+      Client gets full escrow refund + bond.
+
+    Valid from: FUNDED, IN_PROGRESS, DELIVERED.
+    """
+    from fastapi import HTTPException as HTTPExc
+    job = await job_service.get_job(db, job_id)
+    if auth.agent_id != job.client_agent_id and auth.agent_id != job.seller_agent_id:
+        raise HTTPExc(status_code=403, detail="Not a party to this job")
+    if job.status not in (JobStatus.FUNDED, JobStatus.IN_PROGRESS, JobStatus.DELIVERED):
+        raise HTTPExc(status_code=409, detail=f"Cannot abort job in status {job.status.value}")
+
+    await escrow_service.abort_job(db, job_id, auth.agent_id)
+    job = await job_service.get_job(db, job_id)
     return JobResponse.model_validate(job)
 
 

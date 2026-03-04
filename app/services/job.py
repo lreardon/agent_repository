@@ -97,6 +97,8 @@ async def propose_job(
         acceptance_criteria_hash=criteria_hash,
         requirements=data.requirements,
         agreed_price=data.max_budget,
+        client_abort_penalty=data.client_abort_penalty,
+        seller_abort_penalty=data.seller_abort_penalty,
         delivery_deadline=data.delivery_deadline,
         max_rounds=data.max_rounds,
         current_round=0,
@@ -128,11 +130,17 @@ async def counter_job(
     job.status = JobStatus.NEGOTIATING
     job.current_round += 1
     job.agreed_price = data.proposed_price
+    if data.client_abort_penalty is not None:
+        job.client_abort_penalty = data.client_abort_penalty
+    if data.seller_abort_penalty is not None:
+        job.seller_abort_penalty = data.seller_abort_penalty
 
     log_entry = {
         "round": job.current_round,
         "proposer": str(agent_id),
         "proposed_price": str(data.proposed_price),
+        "client_abort_penalty": str(job.client_abort_penalty),
+        "seller_abort_penalty": str(job.seller_abort_penalty),
         "counter_terms": data.counter_terms,
         "accepted_terms": data.accepted_terms,
         "message": data.message,

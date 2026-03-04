@@ -258,8 +258,23 @@ async def request_withdrawal(
 # ---------------------------------------------------------------------------
 
 
+async def _check_existing_tx(w3, tx_hash_hex: str) -> str | None:
+    """Check an existing tx_hash on-chain. Returns 'completed', 'failed', or None (still pending)."""
+    try:
+        receipt = await w3.eth.get_transaction_receipt(tx_hash_hex)
+        if receipt is not None:
+            return "completed" if receipt.status == 1 else "failed"
+    except Exception:
+        pass  # Tx not found or RPC error — treat as still pending
+    return None
+
+
 async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
-    """Background task: send USDC on-chain for a single withdrawal."""
+    """Background task: send USDC on-chain for a single withdrawal.
+
+    Idempotent: if a tx_hash is already recorded (e.g. from a pre-crash attempt),
+    checks its on-chain status instead of sending a duplicate transaction.
+    """
     from app.database import async_session
 
     from app.services.secrets import get_treasury_key
@@ -287,9 +302,67 @@ async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
             .with_for_update()
         )
         withdrawal = result.scalar_one_or_none()
-        if withdrawal is None or withdrawal.status != WithdrawalStatus.PENDING:
+        if withdrawal is None or withdrawal.status not in (
+            WithdrawalStatus.PENDING, WithdrawalStatus.PROCESSING,
+        ):
             return
 
+        # --- Idempotency: if we already have a tx_hash, check it instead of re-sending ---
+        if withdrawal.tx_hash:
+            logger.info(
+                "Withdrawal %s has existing tx_hash %s — checking on-chain status",
+                withdrawal_id, withdrawal.tx_hash,
+            )
+            tx_status = await _check_existing_tx(w3, withdrawal.tx_hash)
+
+            if tx_status == "completed":
+                withdrawal.status = WithdrawalStatus.COMPLETED
+                withdrawal.processed_at = datetime.now(UTC)
+                await db.commit()
+                logger.info("Withdrawal %s confirmed on-chain: tx=%s", withdrawal_id, withdrawal.tx_hash)
+                return
+            elif tx_status == "failed":
+                # On-chain revert — refund the agent
+                withdrawal.status = WithdrawalStatus.FAILED
+                withdrawal.error_message = "Transaction reverted on-chain"
+                withdrawal.processed_at = datetime.now(UTC)
+                agent_result = await db.execute(
+                    select(Agent).where(Agent.agent_id == withdrawal.agent_id).with_for_update()
+                )
+                agent = agent_result.scalar_one()
+                agent.balance = agent.balance + withdrawal.amount
+                await db.commit()
+                logger.error("Withdrawal %s reverted on-chain — refunded %s", withdrawal_id, withdrawal.amount)
+                return
+            else:
+                # Still pending on-chain — wait and re-check (don't re-send!)
+                logger.info("Withdrawal %s tx %s still pending — waiting for confirmation", withdrawal_id, withdrawal.tx_hash)
+                for _ in range(30):  # ~60s of waiting
+                    await asyncio.sleep(2)
+                    tx_status = await _check_existing_tx(w3, withdrawal.tx_hash)
+                    if tx_status == "completed":
+                        withdrawal.status = WithdrawalStatus.COMPLETED
+                        withdrawal.processed_at = datetime.now(UTC)
+                        await db.commit()
+                        logger.info("Withdrawal %s confirmed after wait: tx=%s", withdrawal_id, withdrawal.tx_hash)
+                        return
+                    elif tx_status == "failed":
+                        withdrawal.status = WithdrawalStatus.FAILED
+                        withdrawal.error_message = "Transaction reverted on-chain"
+                        withdrawal.processed_at = datetime.now(UTC)
+                        agent_result = await db.execute(
+                            select(Agent).where(Agent.agent_id == withdrawal.agent_id).with_for_update()
+                        )
+                        agent = agent_result.scalar_one()
+                        agent.balance = agent.balance + withdrawal.amount
+                        await db.commit()
+                        logger.error("Withdrawal %s reverted after wait — refunded %s", withdrawal_id, withdrawal.amount)
+                        return
+                # Still pending after 60s — leave as PROCESSING for next recovery cycle
+                logger.warning("Withdrawal %s tx %s still unconfirmed after 60s — will retry on next cycle", withdrawal_id, withdrawal.tx_hash)
+                return
+
+        # --- Fresh withdrawal: no tx_hash yet ---
         withdrawal.status = WithdrawalStatus.PROCESSING
         await db.commit()
 
@@ -313,7 +386,13 @@ async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
             signed = treasury.sign_transaction(tx)
             tx_hash = await w3.eth.send_raw_transaction(signed.raw_transaction)
 
+            # Persist tx_hash IMMEDIATELY before marking completed —
+            # this is the critical idempotency point. If we crash after this commit
+            # but before the next, recovery will find the tx_hash and check on-chain.
             withdrawal.tx_hash = tx_hash.hex()
+            await db.commit()
+
+            # Now wait for confirmation
             withdrawal.status = WithdrawalStatus.COMPLETED
             withdrawal.processed_at = datetime.now(UTC)
             await db.commit()

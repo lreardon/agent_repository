@@ -32,15 +32,15 @@ VALID_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.PROPOSED: {JobStatus.NEGOTIATING, JobStatus.AGREED, JobStatus.CANCELLED},
     JobStatus.NEGOTIATING: {JobStatus.AGREED, JobStatus.CANCELLED},
     JobStatus.AGREED: {JobStatus.FUNDED, JobStatus.CANCELLED},
-    JobStatus.FUNDED: {JobStatus.IN_PROGRESS},
-    JobStatus.IN_PROGRESS: {JobStatus.DELIVERED, JobStatus.FAILED},
-    JobStatus.DELIVERED: {JobStatus.VERIFYING, JobStatus.FAILED},
-    JobStatus.VERIFYING: {JobStatus.COMPLETED, JobStatus.FAILED},
+    JobStatus.FUNDED: {JobStatus.IN_PROGRESS, JobStatus.CANCELLED},
+    JobStatus.IN_PROGRESS: {JobStatus.DELIVERED, JobStatus.CANCELLED, JobStatus.FAILED},
+    JobStatus.DELIVERED: {JobStatus.VERIFYING, JobStatus.IN_PROGRESS, JobStatus.CANCELLED, JobStatus.FAILED},
+    JobStatus.VERIFYING: {JobStatus.COMPLETED, JobStatus.IN_PROGRESS},
     JobStatus.COMPLETED: set(),
-    JobStatus.FAILED: set(),  # V2: {JobStatus.DISPUTED}
-    JobStatus.DISPUTED: set(),  # V2: {JobStatus.RESOLVED}
+    JobStatus.FAILED: set(),  # Reserved for deadline expiry (system-initiated)
+    JobStatus.DISPUTED: set(),
     JobStatus.RESOLVED: set(),
-    JobStatus.CANCELLED: set(),
+    JobStatus.CANCELLED: set(),  # Voluntary abort by either party
 }
 
 
@@ -76,6 +76,12 @@ class Job(Base):
     negotiation_log: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
     max_rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     current_round: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    client_abort_penalty: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0.00")
+    )
+    seller_abort_penalty: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0.00")
+    )
     result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)

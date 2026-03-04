@@ -102,6 +102,18 @@ variable "blockchain_network" {
   default     = "base_sepolia"
 }
 
+variable "admin_api_keys_secret_id" {
+  description = "Secret Manager secret ID for admin API keys"
+  type        = string
+  default     = ""
+}
+
+variable "admin_path_prefix_secret_id" {
+  description = "Secret Manager secret ID for admin path prefix"
+  type        = string
+  default     = ""
+}
+
 # --------------------------------------------------------------------------
 # Cloud Run service
 # --------------------------------------------------------------------------
@@ -265,6 +277,32 @@ resource "google_cloud_run_v2_service" "api" {
           secret_key_ref {
             secret  = "treasury_wallet_private_key"
             version = "latest"
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.admin_api_keys_secret_id != "" ? [1] : []
+        content {
+          name = "ADMIN_API_KEYS"
+          value_source {
+            secret_key_ref {
+              secret  = var.admin_api_keys_secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.admin_path_prefix_secret_id != "" ? [1] : []
+        content {
+          name = "ADMIN_PATH_PREFIX"
+          value_source {
+            secret_key_ref {
+              secret  = var.admin_path_prefix_secret_id
+              version = "latest"
+            }
           }
         }
       }

@@ -27,6 +27,7 @@ dependencies = [
     "google-cloud-error-reporting>=1.11.0",
     "prometheus-client>=0.20.0",
     "prometheus-fastapi-instrumentator>=7.0.0",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]

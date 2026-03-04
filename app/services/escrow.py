@@ -85,6 +85,24 @@ async def fund_job(
             detail=f"Insufficient balance: {client.balance} < {amount}",
         )
 
+    # Determine seller bond (performance bond)
+    seller_bond = job.seller_abort_penalty or Decimal("0.00")
+
+    # If seller has a bond, lock and deduct their balance too
+    if seller_bond > 0:
+        result = await db.execute(
+            select(Agent).where(Agent.agent_id == job.seller_agent_id).with_for_update()
+        )
+        seller = result.scalar_one_or_none()
+        if seller is None:
+            raise HTTPException(status_code=404, detail="Seller agent not found")
+        if seller.balance < seller_bond:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Seller has insufficient balance for performance bond: ${seller.balance} < ${seller_bond}",
+            )
+        seller.balance = seller.balance - seller_bond
+
     # Atomic: debit client + create funded escrow
     client.balance = client.balance - amount
 
@@ -95,6 +113,7 @@ async def fund_job(
         client_agent_id=client_agent_id,
         seller_agent_id=job.seller_agent_id,
         amount=amount,
+        seller_bond_amount=seller_bond,
         status=EscrowStatus.FUNDED,
         funded_at=now,
     )
@@ -106,6 +125,8 @@ async def fund_job(
     # Audit log
     await _log_audit(db, escrow.escrow_id, EscrowAction.CREATED, amount, client_agent_id)
     await _log_audit(db, escrow.escrow_id, EscrowAction.FUNDED, amount, client_agent_id)
+    if seller_bond > 0:
+        await _log_audit(db, escrow.escrow_id, EscrowAction.SELLER_BOND_FUNDED, seller_bond, job.seller_agent_id)
 
     await db.commit()
     await db.refresh(escrow)
@@ -188,8 +209,8 @@ async def release_escrow(
     if seller is None:
         raise HTTPException(status_code=404, detail="Seller agent not found")
 
-    # Credit seller (minus their base fee share)
-    seller.balance = seller.balance + seller_payout
+    # Credit seller (minus their base fee share) + return performance bond
+    seller.balance = seller.balance + seller_payout + escrow.seller_bond_amount
 
     # Update escrow
     now = datetime.now(UTC)
@@ -213,6 +234,92 @@ async def release_escrow(
             "fee_base_percent": str(settings.fee_base_percent),
         },
     )
+    if escrow.seller_bond_amount > 0:
+        await _log_audit(db, escrow.escrow_id, EscrowAction.BOND_RETURNED, escrow.seller_bond_amount, escrow.seller_agent_id)
+
+    await db.commit()
+    await db.refresh(escrow)
+    await _cancel_deadline_quietly(job_id)
+    return escrow
+
+
+async def abort_job(
+    db: AsyncSession, job_id: uuid.UUID, aborter_agent_id: uuid.UUID,
+    *, is_deadline: bool = False,
+) -> EscrowAccount:
+    """Abort a funded job with penalty distribution.
+
+    If the client aborts:
+      - Client gets: agreed_price - client_abort_penalty
+      - Seller gets: client_abort_penalty + their bond back
+
+    If the seller aborts (or deadline expires):
+      - Client gets: agreed_price + seller_abort_penalty (bond forfeited)
+      - Seller gets: nothing (loses bond)
+    """
+    result = await db.execute(
+        select(EscrowAccount).where(EscrowAccount.job_id == job_id).with_for_update()
+    )
+    escrow = result.scalar_one_or_none()
+    if escrow is None:
+        raise HTTPException(status_code=404, detail="Escrow not found for this job")
+    if escrow.status != EscrowStatus.FUNDED:
+        raise HTTPException(status_code=409, detail=f"Escrow must be funded, currently {escrow.status.value}")
+
+    # Get the job for penalty amounts
+    job_result = await db.execute(select(Job).where(Job.job_id == job_id))
+    job = job_result.scalar_one()
+
+    client_penalty = job.client_abort_penalty or Decimal("0.00")
+    seller_bond = escrow.seller_bond_amount
+
+    is_client_abort = (aborter_agent_id == escrow.client_agent_id) and not is_deadline
+
+    # Lock both agent balance rows
+    client_result = await db.execute(
+        select(Agent).where(Agent.agent_id == escrow.client_agent_id).with_for_update()
+    )
+    client = client_result.scalar_one()
+
+    seller_result = await db.execute(
+        select(Agent).where(Agent.agent_id == escrow.seller_agent_id).with_for_update()
+    )
+    seller = seller_result.scalar_one()
+
+    if is_client_abort:
+        # Client aborts: pay penalty to seller, get remainder back
+        client_refund = escrow.amount - client_penalty
+        client.balance += client_refund
+        seller.balance += client_penalty + seller_bond  # seller gets penalty + bond back
+
+        await _log_audit(db, escrow.escrow_id, EscrowAction.ABORT_CLIENT, client_penalty, aborter_agent_id, {
+            "client_refund": str(client_refund),
+            "seller_receives": str(client_penalty),
+            "bond_returned": str(seller_bond),
+        })
+        if seller_bond > 0:
+            await _log_audit(db, escrow.escrow_id, EscrowAction.BOND_RETURNED, seller_bond, escrow.seller_agent_id)
+    else:
+        # Seller aborts or deadline/verification failure: client gets full refund + bond
+        client.balance += escrow.amount + seller_bond
+
+        action = EscrowAction.ABORT_SELLER
+        await _log_audit(db, escrow.escrow_id, action, seller_bond, aborter_agent_id, {
+            "client_refund": str(escrow.amount),
+            "bond_forfeited": str(seller_bond),
+            "reason": "deadline_expired" if is_deadline else "seller_abort",
+        })
+        if seller_bond > 0:
+            await _log_audit(db, escrow.escrow_id, EscrowAction.BOND_FORFEITED, seller_bond, escrow.seller_agent_id)
+
+    # Update escrow and job status
+    escrow.status = EscrowStatus.REFUNDED
+    escrow.released_at = datetime.now(UTC)
+
+    if is_deadline:
+        job.status = JobStatus.FAILED
+    else:
+        job.status = JobStatus.CANCELLED
 
     await db.commit()
     await db.refresh(escrow)

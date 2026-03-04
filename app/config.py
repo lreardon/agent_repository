@@ -129,6 +129,7 @@ class Settings(BaseSettings):
 
     # Admin
     admin_api_keys: str = ""  # Comma-separated admin API keys; empty = admin disabled
+    admin_path_prefix: str = "/admin"  # Customize to obscure admin endpoint location
     deposit_watcher_enabled: bool = True  # Enable background chain scanner
     deposit_watcher_interval_seconds: int = 15  # Polling interval for chain scanner
 

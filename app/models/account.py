@@ -35,6 +35,14 @@ class Account(Base):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
+    # Dashboard session
+    dashboard_token: Mapped[str | None] = mapped_column(
+        String(128), unique=True, nullable=True,
+    )
+    dashboard_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
 
 class EmailVerification(Base):
     __tablename__ = "email_verifications"

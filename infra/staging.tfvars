@@ -24,3 +24,7 @@ treasury_wallet_address = "0xaa1FAF0bCfd2915d679b0b60D7A82D4379be19dD"
 # Blockchain
 blockchain_network = "base_sepolia"
 
+
+# Admin API (secrets must exist in Secret Manager with versions + IAM bindings)
+admin_api_keys_secret_id    = "admin-api-keys-staging"
+admin_path_prefix_secret_id = "admin-path-prefix-staging"
