@@ -219,9 +219,12 @@ def _get_k8s_clients():
     )
     credentials.refresh(google.auth.transport.requests.Request())
 
-    # Configure K8s client
+    # Configure K8s client — use private endpoint when available (Cloud Run → VPC)
     configuration = k8s_client.Configuration()
-    configuration.host = f"https://{gke_cluster.endpoint}"
+    endpoint = gke_cluster.endpoint
+    if gke_cluster.private_cluster_config and gke_cluster.private_cluster_config.private_endpoint:
+        endpoint = gke_cluster.private_cluster_config.private_endpoint
+    configuration.host = f"https://{endpoint}"
     configuration.api_key = {"authorization": f"Bearer {credentials.token}"}
     configuration.ssl_ca_cert = _write_ca_cert(gke_cluster.master_auth.cluster_ca_certificate)
     configuration.verify_ssl = True
