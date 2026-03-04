@@ -57,6 +57,8 @@ locals {
     "roles/resourcemanager.projectIamAdmin",
     # Terraform state in GCS
     "roles/storage.objectAdmin",
+    # Terraform needs to read/manage secrets
+    "roles/secretmanager.admin",
   ]
 }
 
