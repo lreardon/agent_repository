@@ -1,7 +1,7 @@
 """create deposit_watcher_state table
 
 Revision ID: 015_create_deposit_watcher_state
-Revises: 014_optional_endpoint_and_presence
+Revises: 014
 Create Date: 2026-03-03 20:00:00
 
 """
@@ -13,9 +13,9 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '015_create_deposit_watcher_state'
-down_revision: Union[str, None] = '014_optional_endpoint_and_presence'
+down_revision: Union[str, None] = '014'
 branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = '014_optional_endpoint_and_presence'
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
