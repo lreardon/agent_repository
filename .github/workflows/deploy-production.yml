@@ -117,6 +117,16 @@ jobs:
           service: ${{ env.SERVICE }}
           image: ${{ needs.build.outputs.image_sha }}
           region: ${{ env.REGION }}
+          gcloud_component: beta
+        env:
+          CLOUDSDK_CORE_VERBOSITY: debug
+
+      - name: Verify deployment
+        run: |
+          echo "=== Service details ==="
+          gcloud run services describe ${SERVICE} --region=${REGION} --format=yaml
+          echo "=== Latest revision ==="
+          gcloud run revisions list --service=${SERVICE} --region=${REGION} --format="table(name,status.conditions.status,image)" --limit=3
 
       - name: Smoke test
         run: |
