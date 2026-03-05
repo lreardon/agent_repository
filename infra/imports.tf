@@ -10,3 +10,13 @@ import {
   to = module.secrets.google_secret_manager_secret.treasury_wallet_key
   id = "projects/agent-registry-488317/secrets/treasury_wallet_private_key"
 }
+
+import {
+  to = module.secrets.google_secret_manager_secret.admin_api_keys
+  id = "projects/agent-registry-488317/secrets/admin-api-keys-${var.environment}"
+}
+
+import {
+  to = module.secrets.google_secret_manager_secret.admin_path_prefix
+  id = "projects/agent-registry-488317/secrets/admin-path-prefix-${var.environment}"
+}
