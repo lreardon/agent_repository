@@ -454,6 +454,21 @@ def test_sign_webhook_payload_tampered_body() -> None:
     assert sig != tampered_sig
 
 
+@pytest.mark.asyncio
+async def test_list_webhooks_wrong_owner(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """M20/WHK-1: Listing webhooks for another agent returns 403."""
+    agent_id_a, pk_a = await _create_agent(db_session)
+    agent_id_b, pk_b = await _create_agent(db_session)
+
+    # Agent B tries to list agent A's webhooks
+    path = f"/agents/{agent_id_a}/webhooks"
+    headers = make_auth_headers(agent_id_b, pk_b, "GET", path)
+    resp = await client.get(path, headers=headers)
+    assert resp.status_code == 403
+
+
 def test_sign_webhook_payload_tampered_timestamp() -> None:
     """Changing the timestamp invalidates the signature."""
     secret = "secret"

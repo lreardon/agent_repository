@@ -471,3 +471,29 @@ class TestAdminObfuscatedPrefix:
         """Admin endpoints are NOT at /admin/ — obfuscated prefix only."""
         resp = await admin_client.get("/admin/stats", headers=ADMIN_HEADERS)
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Comma-separated admin keys (H9 / ADM-2)
+# ---------------------------------------------------------------------------
+
+
+class TestCommaAdminKeys:
+
+    @pytest.mark.asyncio
+    async def test_comma_separated_admin_keys(self, client: AsyncClient):
+        """Both keys in a comma-separated admin_api_keys config work."""
+        with patch("app.auth.admin.settings") as m:
+            m.admin_api_keys = "key1,key2"
+
+            # key1 works
+            resp = await client.get(f"{ADMIN_PREFIX}/stats", headers={"X-Admin-Key": "key1"})
+            assert resp.status_code == 200
+
+            # key2 works
+            resp = await client.get(f"{ADMIN_PREFIX}/stats", headers={"X-Admin-Key": "key2"})
+            assert resp.status_code == 200
+
+            # wrong key still fails
+            resp = await client.get(f"{ADMIN_PREFIX}/stats", headers={"X-Admin-Key": "key3"})
+            assert resp.status_code == 404

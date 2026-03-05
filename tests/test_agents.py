@@ -371,3 +371,41 @@ async def test_deactivate_then_reregister_same_key(client: AsyncClient) -> None:
     # Try re-registering with same key
     resp = await client.post("/agents", json=make_agent_data(pub))
     assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Deactivate wrong-owner test (M11 / AGT-4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deactivate_agent_wrong_owner(client: AsyncClient) -> None:
+    """Agent A cannot deactivate agent B (403)."""
+    priv_a, pub_a = generate_keypair()
+    _, pub_b = generate_keypair()
+
+    resp_a = await client.post("/agents", json=make_agent_data(pub_a))
+    agent_a_id = resp_a.json()["agent_id"]
+
+    resp_b = await client.post("/agents", json=make_agent_data(pub_b))
+    agent_b_id = resp_b.json()["agent_id"]
+
+    headers = make_auth_headers(agent_a_id, priv_a, "DELETE", f"/agents/{agent_b_id}")
+    resp = await client.delete(f"/agents/{agent_b_id}", headers=headers)
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# webhook_secret not leaked in registration (M12 / AGT-5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_register_agent_no_webhook_secret_leak(client: AsyncClient) -> None:
+    """Registration response must NOT contain webhook_secret."""
+    _, public_key = generate_keypair()
+    data = make_agent_data(public_key)
+    resp = await client.post("/agents", json=data)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "webhook_secret" not in body

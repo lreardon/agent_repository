@@ -429,6 +429,115 @@ async def test_escrow_audit_log_populated(client: AsyncClient, db_session) -> No
 
 
 @pytest.mark.asyncio
+async def test_release_returns_seller_bond(client: AsyncClient) -> None:
+    """H4/ESC-2: Seller bond returned on release when seller_abort_penalty > 0."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "100.00")
+
+    # Propose with seller_abort_penalty (bond)
+    data = {
+        "seller_agent_id": seller_id,
+        "max_budget": "100.00",
+        "client_abort_penalty": "0.00",
+        "seller_abort_penalty": "20.00",
+    }
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 201
+    job_id = resp.json()["job_id"]
+
+    # Seller accepts
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+
+    # Fund (collects seller bond of 20)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+
+    # Seller: 100 - 20 (bond) = 80
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
+    resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "80.00"
+
+    # Start → deliver → complete (release)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    deliver_data = {"result": {"data": "output"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    await client.post(f"/jobs/{job_id}/complete", headers=headers)
+
+    # Seller should get: 80 - 0.01 (storage) + 99.50 (payout) + 20.00 (bond) = 199.49
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
+    resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "199.49"
+
+
+# ---------------------------------------------------------------------------
+# Double-release / double-refund prevention (M1 / ESC-4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_double_release_prevention(client: AsyncClient) -> None:
+    """Cannot release escrow twice (completing an already completed job)."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+    job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "100.00")
+
+    # Fund → start → deliver → complete
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+    deliver_data = {"result": {"data": "output"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 200
+
+    # Try to complete again — should fail (already completed)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_double_refund_prevention(client: AsyncClient) -> None:
+    """Cannot refund escrow twice (failing an already failed job)."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+    job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "100.00")
+
+    # Fund → start → fail
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    resp = await client.post(f"/jobs/{job_id}/fail", headers=headers)
+    assert resp.status_code == 200
+
+    # Try to fail again — should fail (already failed)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    resp = await client.post(f"/jobs/{job_id}/fail", headers=headers)
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_fund_not_agreed_job_fails(client: AsyncClient) -> None:
     """Cannot fund a job that isn't in agreed status."""
     client_id, client_priv = await _create_agent(client)

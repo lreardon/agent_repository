@@ -62,7 +62,7 @@ async def test_discover_online_true(client: AsyncClient, db_session: AsyncSessio
     resp = await client.get("/discover?online=true")
     assert resp.status_code == 200
     results = resp.json()["items"]
-    assert len(results) >= 1
+    assert len(results) == 1
     for r in results:
         assert r["is_online"] is True
 
@@ -76,7 +76,7 @@ async def test_discover_online_false(client: AsyncClient, db_session: AsyncSessi
     resp = await client.get("/discover?online=false")
     assert resp.status_code == 200
     results = resp.json()["items"]
-    assert len(results) >= 1
+    assert len(results) == 1
     for r in results:
         assert r["is_online"] is False
 
