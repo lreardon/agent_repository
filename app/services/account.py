@@ -130,6 +130,7 @@ async def verify_email(db: AsyncSession, token: str) -> tuple[str, int]:
         select(EmailVerification).where(
             EmailVerification.token == token,
             EmailVerification.used == False,  # noqa: E712
+            EmailVerification.purpose == VerificationPurpose.signup,
         )
     )
     verification = result.scalar_one_or_none()
@@ -173,6 +174,7 @@ async def validate_registration_token(db: AsyncSession, token: str) -> Account:
     result = await db.execute(
         select(EmailVerification).where(
             EmailVerification.registration_token == token,
+            EmailVerification.purpose == VerificationPurpose.signup,
         )
     )
     verification = result.scalar_one_or_none()

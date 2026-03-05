@@ -336,7 +336,7 @@ async def test_get_agent_reviews_pagination(client: AsyncClient) -> None:
 
     resp = await client.get(f"/agents/{seller_id}/reviews?limit=1&offset=0")
     assert resp.status_code == 200
-    assert resp.json()["total"] <= 1
+    assert resp.json()["total"] == 1
 
 
 def test_recency_weight_recent() -> None:
@@ -370,3 +370,83 @@ def test_recency_weight_boundary_30_days() -> None:
 
     at_91 = datetime.now(UTC) - timedelta(days=91)
     assert _recency_weight(at_91) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Real pagination test (M33 / REV-2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_review_pagination_multiple_pages(client: AsyncClient) -> None:
+    """Create 3 reviews, request limit=1, verify total=3 and pagination works."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "2000.00")
+    await _deposit(client, seller_id, seller_priv, "50.00")
+
+    # Complete 3 jobs and review each
+    for rating in (3, 4, 5):
+        job_id = await _complete_job(client, client_id, client_priv, seller_id, seller_priv, "50.00")
+        review = {"rating": rating}
+        headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+        resp = await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+        assert resp.status_code == 201
+
+    # Page 1: limit=1, offset=0
+    resp = await client.get(f"/agents/{seller_id}/reviews?limit=1&offset=0")
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 3
+    assert len(resp.json()["items"]) == 1
+    first_review_id = resp.json()["items"][0]["review_id"]
+
+    # Page 2: limit=1, offset=1
+    resp = await client.get(f"/agents/{seller_id}/reviews?limit=1&offset=1")
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 3
+    assert len(resp.json()["items"]) == 1
+    assert resp.json()["items"][0]["review_id"] != first_review_id
+
+
+# ---------------------------------------------------------------------------
+# Review on CANCELLED job rejected (M34 / REV-4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_review_on_cancelled_job_rejected(client: AsyncClient) -> None:
+    """Submitting a review on a cancelled (aborted) job returns 409."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "100.00")
+
+    # Propose → accept → fund → abort (cancelled)
+    data = {
+        "seller_agent_id": seller_id,
+        "max_budget": "100.00",
+        "client_abort_penalty": "0.00",
+        "seller_abort_penalty": "0.00",
+    }
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 201
+    job_id = resp.json()["job_id"]
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    await client.post(f"/jobs/{job_id}/fund", headers=headers)
+
+    # Abort
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+    # Try to review — should be rejected
+    review = {"rating": 1, "comment": "Cancelled job"}
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/reviews", review)
+    resp = await client.post(f"/jobs/{job_id}/reviews", json=review, headers=headers)
+    assert resp.status_code == 409

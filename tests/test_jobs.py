@@ -927,3 +927,198 @@ async def test_fail_rejects_job_with_acceptance_criteria(client: AsyncClient) ->
     resp = await client.post(f"/jobs/{job_id}/fail", headers=headers)
     assert resp.status_code == 409
     assert "verify" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# /abort endpoint tests (JOB-1 / H1)
+# ---------------------------------------------------------------------------
+
+
+async def _get_funded_job_with_penalties(
+    client: AsyncClient,
+    client_abort_penalty: str = "10.00",
+    seller_abort_penalty: str = "20.00",
+    budget: str = "100.00",
+) -> tuple[str, str, str, str, str]:
+    """Create funded job with penalties. Returns (job_id, client_id, client_priv, seller_id, seller_priv)."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "100.00")
+
+    data = {
+        "seller_agent_id": seller_id,
+        "max_budget": budget,
+        "client_abort_penalty": client_abort_penalty,
+        "seller_abort_penalty": seller_abort_penalty,
+    }
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 201
+    job_id = resp.json()["job_id"]
+
+    # Seller accepts (no criteria, no hash needed)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    resp = await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    assert resp.status_code == 200
+
+    # Fund
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    assert resp.status_code == 200
+
+    return job_id, client_id, client_priv, seller_id, seller_priv
+
+
+@pytest.mark.asyncio
+async def test_client_abort_refunds_and_penalizes(client: AsyncClient) -> None:
+    """Client aborts funded job: pays penalty to seller, gets remainder back."""
+    job_id, client_id, client_priv, seller_id, seller_priv = (
+        await _get_funded_job_with_penalties(client, client_abort_penalty="10.00", seller_abort_penalty="20.00")
+    )
+
+    # Client: 500 - 100 (escrow) = 400
+    # Seller: 100 - 20 (bond) = 80
+
+    # Client aborts
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+    # Client gets: 100 - 10 (penalty) = 90 refund → 400 + 90 = 490
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
+    resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "490.00"
+
+    # Seller gets: 10 (penalty) + 20 (bond back) = 30 → 80 + 30 = 110
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
+    resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "110.00"
+
+
+@pytest.mark.asyncio
+async def test_seller_abort_forfeits_bond(client: AsyncClient) -> None:
+    """Seller aborts: loses bond to client, gets nothing."""
+    job_id, client_id, client_priv, seller_id, seller_priv = (
+        await _get_funded_job_with_penalties(client, client_abort_penalty="10.00", seller_abort_penalty="20.00")
+    )
+
+    # Client: 500 - 100 = 400, Seller: 100 - 20 (bond) = 80
+
+    # Start the job so seller can abort from IN_PROGRESS
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    # Seller aborts
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+    # Client gets: 100 (escrow) + 20 (bond) = 120 → 400 + 120 = 520
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
+    resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "520.00"
+
+    # Seller gets nothing: stays at 80
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
+    resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "80.00"
+
+
+@pytest.mark.asyncio
+async def test_abort_from_funded_state(client: AsyncClient) -> None:
+    """Abort works from FUNDED state (before start)."""
+    job_id, client_id, client_priv, seller_id, seller_priv = (
+        await _get_funded_job_with_penalties(client)
+    )
+
+    # Abort directly from funded (no start)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_abort_invalid_state(client: AsyncClient) -> None:
+    """Abort from PROPOSED/AGREED state returns 409."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    # Propose only (PROPOSED state)
+    job = await _propose_job(client, client_id, client_priv, seller_id, acceptance_criteria=None)
+    job_id = job["job_id"]
+
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 409
+
+    # Accept (AGREED state)
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    await client.post(f"/jobs/{job_id}/accept", headers=headers)
+
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_abort_non_party(client: AsyncClient) -> None:
+    """Third party cannot abort (403)."""
+    job_id, _, _, _, _ = await _get_funded_job_with_penalties(client)
+
+    intruder_id, intruder_priv = await _create_agent(client)
+    headers = make_auth_headers(intruder_id, intruder_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Deliver fee_charged assertion (M4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deliver_returns_fee_charged(client: AsyncClient) -> None:
+    """Deliver endpoint response includes fee_charged with expected fields."""
+    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    result = {"result": {"output": "done"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", result)
+    resp = await client.post(f"/jobs/{job_id}/deliver", json=result, headers=headers)
+    assert resp.status_code == 200
+    assert "fee_charged" in resp.json()
+    fee = resp.json()["fee_charged"]
+    assert "amount" in fee
+    assert "fee_type" in fee
+
+
+# ---------------------------------------------------------------------------
+# Fail endpoint info leak (M5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fail_non_party_gets_criteria_leak(client: AsyncClient) -> None:
+    """Third party trying to fail a job with criteria gets 409 (info leak — criteria checked before auth).
+
+    Known issue (JOB-5): the /fail endpoint checks acceptance_criteria before party
+    membership, so a third party learns whether the job has criteria (409) vs not.
+    Ideally this should return 403, but documenting current behavior.
+    """
+    job_id, _, _, seller_id, seller_priv = await _get_funded_job(client)
+
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    intruder_id, intruder_priv = await _create_agent(client)
+    headers = make_auth_headers(intruder_id, intruder_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    resp = await client.post(f"/jobs/{job_id}/fail", headers=headers)
+    # Currently returns 409 (criteria leak) — should ideally be 403
+    assert resp.status_code == 409

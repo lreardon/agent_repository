@@ -526,7 +526,9 @@ async def test_credit_deposit_below_minimum_fails(client: AsyncClient, db_sessio
 
 @pytest.mark.asyncio
 async def test_failed_withdrawal_refunds_balance(client: AsyncClient, db_session: AsyncSession) -> None:
-    """If a withdrawal fails during processing, the amount is refunded."""
+    """If a withdrawal fails during processing, _process_withdrawal refunds the agent."""
+    from app.services.wallet import _process_withdrawal
+
     agent_id, priv = await _create_agent(client)
     await _deposit(client, agent_id, priv, "100.00")
 
@@ -544,25 +546,19 @@ async def test_failed_withdrawal_refunds_balance(client: AsyncClient, db_session
     resp = await client.get(bal_path, headers=headers)
     assert resp.json()["balance"] == "50.00"
 
-    # Simulate failed withdrawal processing by directly updating the record
-    result = await db_session.execute(
-        select(WithdrawalRequest).where(
-            WithdrawalRequest.withdrawal_id == uuid.UUID(withdrawal_id)
-        )
-    )
-    withdrawal = result.scalar_one()
-    withdrawal.status = WithdrawalStatus.FAILED
-    withdrawal.error_message = "Simulated failure"
+    # Process the withdrawal with a mock that simulates on-chain revert
+    mock_w3 = _make_mock_w3(receipt_status=0)  # status=0 means reverted
 
-    # Refund the balance
-    agent_result = await db_session.execute(
-        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id)).with_for_update()
-    )
-    agent = agent_result.scalar_one()
-    agent.balance = agent.balance + withdrawal.amount
-    await db_session.commit()
+    with _withdrawal_patches(mock_w3, db_session):
+        await _process_withdrawal(uuid.UUID(withdrawal_id))
 
-    # Balance should be back to 100
+    # Withdrawal should be marked FAILED
+    wd_result = await db_session.execute(
+        select(WithdrawalRequest).where(WithdrawalRequest.withdrawal_id == uuid.UUID(withdrawal_id))
+    )
+    assert wd_result.scalar_one().status == WithdrawalStatus.FAILED
+
+    # Balance should be refunded back to 100
     headers = make_auth_headers(agent_id, priv, "GET", bal_path)
     resp = await client.get(bal_path, headers=headers)
     assert resp.json()["balance"] == "100.00"

@@ -206,3 +206,20 @@ async def test_complete_rejects_non_client(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
     resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_verify_non_delivered_rejected(client: AsyncClient) -> None:
+    """Verify on a non-delivered job returns 409."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "200.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+
+    job_id = await _setup_funded_job(client, client_id, client_priv, seller_id, seller_priv)
+
+    # Try to verify without delivering first (job is in_progress)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/verify", b"")
+    resp = await client.post(f"/jobs/{job_id}/verify", headers=headers)
+    assert resp.status_code == 409
+    assert "delivered" in resp.json()["detail"].lower()

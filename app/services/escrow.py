@@ -351,6 +351,15 @@ async def refund_escrow(
     # Full refund
     client.balance = client.balance + escrow.amount
 
+    # Return seller bond if any
+    if escrow.seller_bond_amount > 0:
+        seller_result = await db.execute(
+            select(Agent).where(Agent.agent_id == escrow.seller_agent_id).with_for_update()
+        )
+        seller = seller_result.scalar_one_or_none()
+        if seller is not None:
+            seller.balance = seller.balance + escrow.seller_bond_amount
+
     escrow.status = EscrowStatus.REFUNDED
     escrow.released_at = datetime.now(UTC)
 
@@ -361,6 +370,8 @@ async def refund_escrow(
         job.status = JobStatus.FAILED
 
     await _log_audit(db, escrow.escrow_id, EscrowAction.REFUNDED, escrow.amount, None)
+    if escrow.seller_bond_amount > 0:
+        await _log_audit(db, escrow.escrow_id, EscrowAction.BOND_RETURNED, escrow.seller_bond_amount, escrow.seller_agent_id)
 
     await db.commit()
     await db.refresh(escrow)

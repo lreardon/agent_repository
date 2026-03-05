@@ -65,6 +65,8 @@ class JobProposal(BaseModel):
     def validate_penalties(self) -> "JobProposal":
         if self.client_abort_penalty > self.max_budget:
             raise ValueError("client_abort_penalty cannot exceed max_budget")
+        if self.seller_abort_penalty > self.max_budget:
+            raise ValueError("seller_abort_penalty cannot exceed max_budget")
         return self
 
 

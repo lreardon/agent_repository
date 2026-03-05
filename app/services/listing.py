@@ -88,7 +88,12 @@ async def browse_listings(
     offset: int = 0,
 ) -> tuple[list[Listing], int]:
     """Browse active listings, optionally filtered by skill_id."""
-    base = select(Listing).where(Listing.status == ListingStatus.ACTIVE)
+    base = (
+        select(Listing)
+        .join(Agent, Listing.seller_agent_id == Agent.agent_id)
+        .where(Listing.status == ListingStatus.ACTIVE)
+        .where(Agent.status == AgentStatus.ACTIVE)
+    )
     if skill_id:
         base = base.where(Listing.skill_id.ilike(f"%{skill_id}%"))
 

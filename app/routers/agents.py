@@ -196,16 +196,13 @@ async def get_balance(
     return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
 
 
-from pydantic import BaseModel as _BaseModel
-
-class DevDepositRequest(_BaseModel):
-    amount: str
+from app.schemas.agent import DepositRequest
 
 @router.post("/{agent_id}/deposit", response_model=BalanceResponse, dependencies=[Depends(check_rate_limit)],
              responses=OWNER_ERRORS)
 async def dev_deposit(
     agent_id: uuid.UUID,
-    data: DevDepositRequest,
+    data: DepositRequest,
     auth: AuthenticatedAgent = Depends(verify_request),
     db: AsyncSession = Depends(get_db),
 ) -> BalanceResponse:
@@ -213,7 +210,9 @@ async def dev_deposit(
     from fastapi import HTTPException
     if settings.env == "production" or not settings.dev_deposit_enabled:
         raise HTTPException(status_code=404, detail="Not found")
-    agent = await agent_service.deposit(db, agent_id, Decimal(data.amount))
+    if auth.agent_id != agent_id:
+        raise HTTPException(status_code=403, detail="Can only deposit to own agent")
+    agent = await agent_service.deposit(db, agent_id, data.amount)
     return BalanceResponse(agent_id=agent.agent_id, balance=agent.balance)
 
 

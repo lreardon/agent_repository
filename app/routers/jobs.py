@@ -136,11 +136,13 @@ async def deliver_job(
     """Seller submits deliverable. Storage fee is charged to the seller."""
     from app.services.fees import calculate_storage_fee, charge_fee
 
-    # Calculate and charge storage fee before accepting delivery
+    # Deliver first (checks seller identity and valid state transition)
+    job = await job_service.deliver_job(db, job_id, auth.agent_id, data.result)
+
+    # Charge storage fee after confirming the caller is the actual seller
     storage_fee = calculate_storage_fee(data.result)
     await charge_fee(db, auth.agent_id, storage_fee)
 
-    job = await job_service.deliver_job(db, job_id, auth.agent_id, data.result)
     return {
         **JobResponse.model_validate(job).model_dump(mode="json"),
         "fee_charged": storage_fee.to_dict(),

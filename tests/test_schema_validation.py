@@ -119,19 +119,22 @@ async def test_review_rating_six_rejected(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_deposit_amount_validation(client: AsyncClient) -> None:
-    """A14/SV: Deposit with zero or negative amount rejected."""
+    """A14/SV: Deposit with zero or negative amount rejected by DepositRequest schema."""
     priv, pub = generate_keypair()
     resp = await client.post("/agents", json=make_agent_data(pub))
     agent_id = resp.json()["agent_id"]
 
-    # Dev deposit is unvalidated (amount is a plain string).
-    # Verify that the dev deposit endpoint accepts "0" (no schema constraint)
-    # and that negative deposits produce a negative balance shift.
+    # Zero amount rejected (DepositRequest requires gt=0)
     data = {"amount": "0"}
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", data)
     resp = await client.post(f"/agents/{agent_id}/deposit", json=data, headers=headers)
-    assert resp.status_code == 200
-    assert resp.json()["balance"] == "0.00"
+    assert resp.status_code == 422
+
+    # Negative amount also rejected
+    data = {"amount": "-5.00"}
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/deposit", data)
+    resp = await client.post(f"/agents/{agent_id}/deposit", json=data, headers=headers)
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
