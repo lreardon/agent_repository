@@ -16,7 +16,7 @@ on:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: us-west1
-  SERVICE: agent-registry-api-production
+  SERVICE: agent-registry-production
   REPO: agent-registry
   TF_VAR_FILE: production.tfvars
 
