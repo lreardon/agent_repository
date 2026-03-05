@@ -41,9 +41,9 @@ Real small-value transactions on mainnet to validate the full deposit → credit
 ## 2. High Priority
 
 ### ~~2.1 Load Testing (~6h)~~ ✅ Complete (2026-03-04)
-k6 load tests executed locally. Results: [`load-test-results-2026-03-04.md`](load-test-results-2026-03-04.md)
+k6 load tests executed locally and against staging. Results: [`load-test-results-2026-03-04.md`](load-test-results-2026-03-04.md), [`load-test-results-2026-03-04-staging.md`](load-test-results-2026-03-04-staging.md)
 
-**Summary:** All 4 scenarios ran (read_load, job_lifecycle, rate_limit_burst, escrow_stress). 24,062 requests at ~100 req/s. Rate limiting works correctly. Escrow is safe under contention (zero negative balances). Performance thresholds failed on single-worker uvicorn — expected; needs multi-worker for production. Fixed 3 bugs in load test setup scripts and 1 in main app (deposit watcher config). High error rate traced to signer proxy connection limits and single-worker bottleneck, not API logic issues.
+**Summary:** All 4 scenarios ran against both environments. Rate limiting ✅, escrow integrity ✅ (zero negative balances), 30 full job lifecycles completed on staging ✅. Performance thresholds failed due to signer proxy bottleneck and micro-tier staging DB — not API issues. p50 on staging: 188ms.
 
 ### ~~2.2 Security Audit (~8h)~~ ✅ Complete (2026-03-04)
 

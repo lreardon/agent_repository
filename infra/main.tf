@@ -215,6 +215,7 @@ module "gke" {
   network_id                = module.networking.vpc_id
   master_authorized_cidr    = "10.8.0.0/28"
   cloud_run_service_account = google_service_account.cloud_run_api.email
+  master_ipv4_cidr_block    = var.environment == "production" ? "172.16.1.0/28" : "172.16.0.0/28"
 }
 
 # --------------------------------------------------------------------------

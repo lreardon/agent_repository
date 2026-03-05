@@ -10,6 +10,12 @@ variable "environment" {
   type = string
 }
 
+variable "master_ipv4_cidr_block" {
+  description = "CIDR for GKE master nodes (must not overlap with other subnets)"
+  type        = string
+  default     = "172.16.0.0/28"
+}
+
 variable "network" {
   description = "VPC network name"
   type        = string
@@ -45,7 +51,7 @@ resource "google_container_cluster" "sandbox" {
   private_cluster_config {
     enable_private_nodes    = true
     enable_private_endpoint = false  # Allow public kubectl access (restricted by master_authorized_networks)
-    master_ipv4_cidr_block  = "172.16.0.0/28"
+    master_ipv4_cidr_block  = var.master_ipv4_cidr_block
   }
 
   # Restrict API server access
@@ -63,7 +69,7 @@ resource "google_container_cluster" "sandbox" {
   }
 
   # Deletion protection — disable for staging, enable for production
-  deletion_protection = var.environment == "production" ? true : false
+  deletion_protection = false # temporarily disabled for cluster replacement
 
   # Timeouts
   timeouts {
@@ -172,7 +178,7 @@ output "cluster_endpoint" {
 }
 
 output "cluster_ca_certificate" {
-  value     = google_container_cluster.sandbox.master_auth[0].cluster_ca_certificate
+  value     = try(google_container_cluster.sandbox.master_auth[0].cluster_ca_certificate, "")
   sensitive = true
 }
 

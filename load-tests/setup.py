@@ -61,27 +61,6 @@ def _get_registration_token(client: httpx.Client, email: str) -> str:
     For staging: signs up, then queries the DB for the verification token
     (requires Cloud SQL Proxy or LOAD_TEST_DB_URL env var).
     """
-    # Try signup
-    resp = client.post(
-        f"{BASE_URL}/v1/auth/signup",
-        content=json.dumps({"email": email}).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-
-    if resp.status_code == 429:
-        print(f"    Rate limited on signup for {email}, waiting...")
-        import time
-        time.sleep(12)
-        resp = client.post(
-            f"{BASE_URL}/v1/auth/signup",
-            content=json.dumps({"email": email}).encode(),
-            headers={"Content-Type": "application/json"},
-        )
-
-    if resp.status_code not in (200, 201, 409):
-        print(f"    Signup failed for {email}: {resp.status_code} {resp.text[:200]}")
-
-    # Get the verification token from the DB
     db_url = os.environ.get("LOAD_TEST_DB_URL")
     if not db_url:
         raise RuntimeError(
@@ -94,6 +73,44 @@ def _get_registration_token(client: httpx.Client, email: str) -> str:
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
 
+    # Check if this email already has a used registration token (agent already exists)
+    cur.execute(
+        "SELECT registration_token FROM email_verifications "
+        "WHERE email = %s AND used = true AND registration_token IS NOT NULL "
+        "ORDER BY created_at DESC LIMIT 1",
+        (email,),
+    )
+    row = cur.fetchone()
+    if row and row[0]:
+        # Account exists — return None to signal "skip registration"
+        conn.close()
+        return None
+
+    # Try signup
+    import time
+    resp = client.post(
+        f"{BASE_URL}/v1/auth/signup",
+        content=json.dumps({"email": email}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+
+    if resp.status_code == 429:
+        wait = int(resp.headers.get("Retry-After", "15"))
+        print(f"    Rate limited on signup, waiting {wait}s...")
+        time.sleep(wait)
+        resp = client.post(
+            f"{BASE_URL}/v1/auth/signup",
+            content=json.dumps({"email": email}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+
+    if resp.status_code == 409:
+        conn.close()
+        return None  # Agent already exists
+
+    if resp.status_code not in (200, 201):
+        print(f"    Signup failed for {email}: {resp.status_code} {resp.text[:200]}")
+
     # Get the latest unused verification token for this email
     cur.execute(
         "SELECT token FROM email_verifications "
@@ -103,6 +120,7 @@ def _get_registration_token(client: httpx.Client, email: str) -> str:
     )
     row = cur.fetchone()
     if not row:
+        conn.close()
         raise RuntimeError(f"No verification token found for {email}")
 
     verify_token = row[0]
@@ -110,6 +128,7 @@ def _get_registration_token(client: httpx.Client, email: str) -> str:
     # Hit the verify endpoint to get a registration token
     verify_resp = client.get(f"{BASE_URL}/v1/auth/verify-email?token={verify_token}")
     if verify_resp.status_code != 200:
+        conn.close()
         raise RuntimeError(f"Verify failed: {verify_resp.status_code} {verify_resp.text[:200]}")
 
     # Extract registration token from DB (verify endpoint sets it)
@@ -145,11 +164,19 @@ def register_agent(client: httpx.Client, name: str, registration_token: str | No
 
     body = json.dumps(payload).encode()
 
-    resp = client.post(
-        f"{BASE_URL}/v1/agents",
-        content=body,
-        headers={"Content-Type": "application/json"},
-    )
+    import time as _time
+    for attempt in range(5):
+        resp = client.post(
+            f"{BASE_URL}/v1/agents",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+        if resp.status_code == 429:
+            wait = int(resp.headers.get("Retry-After", "15"))
+            print(f"    Rate limited on registration, waiting {wait}s...")
+            _time.sleep(wait)
+            continue
+        break
     resp.raise_for_status()
     data = resp.json()
 
@@ -162,13 +189,31 @@ def register_agent(client: httpx.Client, name: str, registration_token: str | No
 
 
 def deposit_funds(client: httpx.Client, agent: dict, amount: str):
-    """Admin-deposit funds for a test agent."""
-    body = json.dumps({"amount": amount}).encode()
-    path = f"/v1/agents/{agent['agent_id']}/deposit"
-    headers = make_headers(agent["agent_id"], agent["private_key"], "POST", path, body)
-    resp = client.post(f"{BASE_URL}{path}", content=body, headers=headers)
-    resp.raise_for_status()
-    print(f"  Deposited {amount} → {agent['display_name']} (balance: {resp.json()['balance']})")
+    """Credit funds to a test agent.
+
+    Uses direct DB update if LOAD_TEST_DB_URL is set (staging),
+    otherwise uses the API deposit endpoint.
+    """
+    db_url = os.environ.get("LOAD_TEST_DB_URL")
+    if db_url:
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE agent_id = %s RETURNING balance",
+            (amount, agent["agent_id"]),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        conn.close()
+        print(f"  Credited {amount} → {agent['display_name']} (balance: {row[0]})")
+    else:
+        body = json.dumps({"amount": amount}).encode()
+        path = f"/v1/agents/{agent['agent_id']}/wallet/deposit-notify"
+        headers = make_headers(agent["agent_id"], agent["private_key"], "POST", path, body)
+        resp = client.post(f"{BASE_URL}{path}", content=body, headers=headers)
+        resp.raise_for_status()
+        print(f"  Deposited {amount} → {agent['display_name']} (balance: {resp.json()['balance']})")
 
 
 def create_listing(client: httpx.Client, agent: dict) -> str:
@@ -198,6 +243,9 @@ def main():
     agents = []
     listings = []
 
+    import time
+    batch_id = int(time.time())
+
     # Check if email verification is required
     needs_email = False
     test_resp = client.post(
@@ -214,13 +262,19 @@ def main():
     for i in range(NUM_AGENTS):
         token = None
         if needs_email:
-            email = f"loadtest-{i:03d}@loadtest.arcoa.ai"
+            email = f"loadtest-{batch_id}-{i:03d}@loadtest.arcoa.ai"
             print(f"  Signing up {email}...")
             import time
             if i > 0 and i % 5 == 0:
                 print("  (pausing to avoid rate limits...)")
                 time.sleep(5)
             token = _get_registration_token(client, email)
+            if token is None:
+                print(f"  Agent for {email} already exists, skipping registration")
+                # We can't recover the private key for existing agents.
+                # Generate a new keypair — won't work for auth, but we'll
+                # need to create fresh agents for the ones we can't recover.
+                continue
         agent = register_agent(client, f"agent-{i:03d}", registration_token=token)
         print(f"  Registered {agent['display_name']} ({agent['agent_id'][:8]}...)")
         agents.append(agent)
