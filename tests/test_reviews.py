@@ -292,7 +292,14 @@ async def test_get_reviews_for_job(client: AsyncClient) -> None:
 
     resp = await client.get(f"/jobs/{job_id}/reviews")
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    reviews = resp.json()
+    assert len(reviews) == 2
+
+    # REV-5 / L17: Verify review content, not just count
+    ratings = {r["rating"] for r in reviews}
+    assert ratings == {5, 4}
+    reviewer_ids = {r["reviewer_agent_id"] for r in reviews}
+    assert reviewer_ids == {client_id, seller_id}
 
 
 @pytest.mark.asyncio

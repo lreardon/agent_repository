@@ -497,3 +497,85 @@ class TestCommaAdminKeys:
             # wrong key still fails
             resp = await client.get(f"{ADMIN_PREFIX}/stats", headers={"X-Admin-Key": "key3"})
             assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Deposits & Withdrawals (ADM-6 / L7)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminDepositsWithdrawals:
+
+    @pytest.mark.asyncio
+    async def test_list_deposits(self, admin_client: AsyncClient, sample_agent: Agent, db_session: AsyncSession):
+        """ADM-6: GET /admin/deposits returns 200 with paginated structure."""
+        # Create a deposit transaction
+        deposit = DepositTransaction(
+            agent_id=sample_agent.agent_id,
+            amount_usdc=Decimal("100.00"),
+            amount_credits=Decimal("100.00"),
+            status=DepositStatus.CREDITED,
+            tx_hash="0x" + "ab" * 32,
+            from_address="0x" + "cd" * 20,
+            block_number=12345678,
+        )
+        db_session.add(deposit)
+        await db_session.flush()
+
+        resp = await admin_client.get(f"{ADMIN_PREFIX}/deposits", headers=ADMIN_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert data["total"] >= 1
+        assert len(data["items"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_list_withdrawals(self, admin_client: AsyncClient, sample_agent: Agent, db_session: AsyncSession):
+        """ADM-6: GET /admin/withdrawals returns 200 with paginated structure."""
+        withdrawal = WithdrawalRequest(
+            agent_id=sample_agent.agent_id,
+            amount=Decimal("50.00"),
+            fee=Decimal("2.00"),
+            net_payout=Decimal("48.00"),
+            destination_address="0x" + "ef" * 20,
+            status=WithdrawalStatus.PENDING,
+        )
+        db_session.add(withdrawal)
+        await db_session.flush()
+
+        resp = await admin_client.get(f"{ADMIN_PREFIX}/withdrawals", headers=ADMIN_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert data["total"] >= 1
+        assert len(data["items"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Pagination (ADM-7 / L8)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminPagination:
+
+    @pytest.mark.asyncio
+    async def test_admin_agents_pagination(self, admin_client: AsyncClient, db_session: AsyncSession):
+        """ADM-7: Create 3 agents, request limit=1, verify total >= 3 and len(items) == 1."""
+        for i in range(3):
+            agent = Agent(
+                public_key=f"pagination_pk_{uuid.uuid4().hex[:16]}",
+                display_name=f"Pagination Agent {i}",
+                webhook_secret=f"secret_pag_{i}",
+                balance=Decimal("0.00"),
+                status=AgentStatus.ACTIVE,
+            )
+            db_session.add(agent)
+        await db_session.flush()
+
+        resp = await admin_client.get(f"{ADMIN_PREFIX}/agents?limit=1", headers=ADMIN_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 3
+        assert len(data["items"]) == 1

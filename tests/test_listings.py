@@ -121,12 +121,17 @@ async def test_browse_listings(client: AsyncClient) -> None:
     # Browse all
     resp = await client.get("/listings")
     assert resp.status_code == 200
-    assert len(resp.json()["items"]) == 3
+    body = resp.json()
+    assert len(body["items"]) == 3
+    # LST-4 / L9: Assert PaginatedResponse.total matches expected count
+    assert body["total"] == 3
 
     # Filter by capability
     resp = await client.get("/listings?skill_id=pdf")
     assert resp.status_code == 200
-    assert len(resp.json()["items"]) == 2  # pdf-extraction and pdf-parse
+    body = resp.json()
+    assert len(body["items"]) == 2  # pdf-extraction and pdf-parse
+    assert body["total"] == 2
 
 
 @pytest.mark.asyncio
@@ -143,27 +148,38 @@ async def test_discover(client: AsyncClient) -> None:
     # Discover all
     resp = await client.get("/discover")
     assert resp.status_code == 200
-    results = resp.json()["items"]
+    body = resp.json()
+    results = body["items"]
     assert len(results) == 3
+    # LST-4 / L9: Assert PaginatedResponse.total matches expected count
+    assert body["total"] == 3
 
     # Filter by capability
     resp = await client.get("/discover?skill_id=pdf")
     assert resp.status_code == 200
-    assert len(resp.json()["items"]) == 2
+    body = resp.json()
+    assert len(body["items"]) == 2
+    assert body["total"] == 2
 
     # Filter by max_price
     resp = await client.get("/discover?max_price=0.10")
     assert resp.status_code == 200
-    assert len(resp.json()["items"]) == 2
+    body = resp.json()
+    assert len(body["items"]) == 2
+    assert body["total"] == 2
 
     # Filter by price_model
     resp = await client.get("/discover?price_model=per_unit")
     assert resp.status_code == 200
-    assert len(resp.json()["items"]) == 3
+    body = resp.json()
+    assert len(body["items"]) == 3
+    assert body["total"] == 3
 
     resp = await client.get("/discover?price_model=flat")
     assert resp.status_code == 200
-    assert len(resp.json()["items"]) == 0
+    body = resp.json()
+    assert len(body["items"]) == 0
+    assert body["total"] == 0
 
 
 @pytest.mark.asyncio
@@ -489,3 +505,25 @@ async def test_duplicate_listing_same_skill_rejected(client: AsyncClient) -> Non
     with pytest.raises(sqlalchemy.exc.IntegrityError, match="uq_listing_seller_skill_active"):
         headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
         await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
+
+
+@pytest.mark.asyncio
+async def test_create_listing_negative_price_rejected(client: AsyncClient) -> None:
+    """LST-5: Negative base_price should be rejected by schema validation (gt=0)."""
+    agent_id, priv, _ = await _create_agent(client)
+    data = _listing_data(base_price="-5.00")
+    body_bytes = json.dumps(data, separators=(",", ":")).encode()
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", body_bytes)
+    resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_listing_zero_price_rejected(client: AsyncClient) -> None:
+    """LST-5: Zero base_price should be rejected by schema validation (gt=0)."""
+    agent_id, priv, _ = await _create_agent(client)
+    data = _listing_data(base_price="0.00")
+    body_bytes = json.dumps(data, separators=(",", ":")).encode()
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", body_bytes)
+    resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
+    assert resp.status_code == 422

@@ -100,7 +100,11 @@ async def test_fund_insufficient_balance(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
     resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
     assert resp.status_code == 422
-    assert "Insufficient balance" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "Insufficient balance" in detail
+    # Verify error includes actual and required amounts (ESC-6)
+    assert "50" in detail  # actual balance
+    assert "100" in detail  # required amount
 
 
 @pytest.mark.asyncio

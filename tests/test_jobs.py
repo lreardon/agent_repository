@@ -247,7 +247,7 @@ async def test_third_party_cannot_act(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_deliver_and_fail_flow(client: AsyncClient) -> None:
-    """Full flow: propose → accept → fund(skip for now) → start → deliver → fail → dispute."""
+    """Propose → accept → attempt start without funding → expect 409 (state transition guard)."""
     client_id, client_priv = await _create_agent(client)
     seller_id, seller_priv = await _create_agent(client)
 

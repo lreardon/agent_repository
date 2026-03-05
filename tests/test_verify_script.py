@@ -123,13 +123,14 @@ print(f"Validated {len(data)} records")
     assert data["verification"]["sandbox"]["exit_code"] == 0
     assert "3 records" in data["verification"]["sandbox"]["stdout"]
 
-    # Seller got paid (minus 2.5% fee)
+    # Seller got paid: $10 initial - storage fee + escrow payout ($100 - 0.5% seller base fee = $99.50)
+    # Base fee is 1% total split evenly: seller pays 0.5% = $0.50 on $100
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    # Seller: $10 - storage fee + escrow payout ($100 - seller base fee)
-    # Exact amount depends on deliverable size and sandbox elapsed time
     seller_balance = float(resp.json()["balance"])
-    assert seller_balance > 100.0  # Seller definitely got paid
+    # Expected: $10 - storage_fee + $99.50 = ~$109.50 (storage fee varies with deliverable size)
+    assert seller_balance > 108.0  # Got paid: initial + payout - small storage fee
+    assert seller_balance < 110.0  # But not more than initial + full payout
 
 
 @_docker

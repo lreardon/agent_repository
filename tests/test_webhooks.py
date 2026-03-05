@@ -349,6 +349,7 @@ async def test_redeliver_failed_webhook(
 
     body = resp.json()
     assert body["status"] == "pending"
+    # WHK-4: Verify redeliver fully resets delivery state
     assert body["attempts"] == 0
     assert body["last_error"] is None
     assert body["delivery_id"] == str(delivery.delivery_id)
@@ -368,7 +369,11 @@ async def test_redeliver_delivered_webhook(
     headers = make_auth_headers(agent_id, private_key, "POST", path)
     resp = await client.post(path, headers=headers)
     assert resp.status_code == 200
-    assert resp.json()["status"] == "pending"
+    body = resp.json()
+    assert body["status"] == "pending"
+    # WHK-4: Verify redeliver fully resets delivery state
+    assert body["attempts"] == 0
+    assert body["last_error"] is None
 
 
 @pytest.mark.asyncio
