@@ -1,7 +1,8 @@
 # No re-delivery mechanism
 
-**Severity:** 🟡 Medium
-**Status:** 🟡 Open
+**Severity:** ✅ Resolved
+**Status:** ✅ Closed (2026-03-04 — Security Audit)
+**Resolution:** Verification retry loop returns job to IN_PROGRESS on failure — seller can redeliver until deadline. Abort penalties provide economic incentives.
 **Source:** CONCERNS.md #12, CONCERNS2.md #12, CONCERNS3-claude.md #12
 
 ## Description

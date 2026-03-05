@@ -10,6 +10,7 @@ from app.auth.middleware import AuthenticatedAgent, verify_request
 from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
 from app.models.webhook import WebhookDelivery, WebhookStatus
+from app.schemas.errors import OWNER_ERRORS
 from app.schemas.webhook import WebhookDeliveryResponse
 
 router = APIRouter(prefix="/agents", tags=["webhooks"])
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/agents", tags=["webhooks"])
     "/{agent_id}/webhooks",
     response_model=list[WebhookDeliveryResponse],
     dependencies=[Depends(check_rate_limit)],
+    responses=OWNER_ERRORS,
 )
 async def list_webhook_deliveries(
     agent_id: uuid.UUID,
@@ -57,6 +59,7 @@ async def list_webhook_deliveries(
     "/{agent_id}/webhooks/{delivery_id}/redeliver",
     response_model=WebhookDeliveryResponse,
     dependencies=[Depends(check_rate_limit)],
+    responses={**OWNER_ERRORS, 409: {"description": "Delivery is already pending"}},
 )
 async def redeliver_webhook(
     agent_id: uuid.UUID,

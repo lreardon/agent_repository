@@ -538,7 +538,13 @@ async def force_refund_escrow(
     Only works on funded escrows. Returns funds to client balance,
     returns seller bond if any, and marks escrow as refunded.
     """
-    escrow = await db.get(EscrowAccount, escrow_id)
+    # Lock escrow row to prevent concurrent force-refunds
+    result = await db.execute(
+        select(EscrowAccount)
+        .where(EscrowAccount.escrow_id == escrow_id)
+        .with_for_update()
+    )
+    escrow = result.scalar_one_or_none()
     if not escrow:
         raise HTTPException(status_code=404, detail="Escrow not found")
 
@@ -548,14 +554,20 @@ async def force_refund_escrow(
             detail=f"Can only refund funded escrows (current: {escrow.status.value})",
         )
 
-    # Refund client
-    client = await db.get(Agent, escrow.client_agent_id)
+    # Lock and refund client
+    result = await db.execute(
+        select(Agent).where(Agent.agent_id == escrow.client_agent_id).with_for_update()
+    )
+    client = result.scalar_one_or_none()
     if client:
         client.balance += escrow.amount
 
-    # Return seller bond
+    # Lock and return seller bond
     if escrow.seller_bond_amount > 0:
-        seller = await db.get(Agent, escrow.seller_agent_id)
+        result = await db.execute(
+            select(Agent).where(Agent.agent_id == escrow.seller_agent_id).with_for_update()
+        )
+        seller = result.scalar_one_or_none()
         if seller:
             seller.balance += escrow.seller_bond_amount
 

@@ -132,5 +132,12 @@ async def check_rate_limit(
     response.headers["X-RateLimit-Remaining"] = str(remaining)
 
     if not allowed:
-        response.headers["Retry-After"] = str(retry_after)
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded",
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(capacity),
+                "X-RateLimit-Remaining": "0",
+            },
+        )

@@ -19,13 +19,15 @@ from app.schemas.agent import (
     BalanceResponse,
     ReputationResponse,
 )
+from app.schemas.errors import AUTH_ERRORS, OWNER_ERRORS, PUBLIC_ERRORS
 from app.services import agent as agent_service
 from app.services import review as review_service
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
-@router.post("", response_model=AgentResponse, status_code=201, dependencies=[Depends(check_rate_limit)])
+@router.post("", response_model=AgentResponse, status_code=201, dependencies=[Depends(check_rate_limit)],
+             responses={**AUTH_ERRORS, 400: {"description": "Invalid agent card or registration token"}})
 async def register_agent(
     data: AgentCreate,
     db: AsyncSession = Depends(get_db),
@@ -36,7 +38,8 @@ async def register_agent(
     return AgentResponse.model_validate(agent)
 
 
-@router.get("/{agent_id}", response_model=AgentResponse, dependencies=[Depends(check_rate_limit)])
+@router.get("/{agent_id}", response_model=AgentResponse, dependencies=[Depends(check_rate_limit)],
+            responses=PUBLIC_ERRORS)
 async def get_agent(
     agent_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -50,6 +53,7 @@ async def get_agent(
     "/{agent_id}/status",
     response_model=AgentStatusResponse,
     dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
 )
 async def get_agent_status(
     agent_id: uuid.UUID,
@@ -114,7 +118,8 @@ async def get_agent_status(
     return status_data
 
 
-@router.patch("/{agent_id}", response_model=AgentResponse, dependencies=[Depends(check_rate_limit)])
+@router.patch("/{agent_id}", response_model=AgentResponse, dependencies=[Depends(check_rate_limit)],
+              responses=OWNER_ERRORS)
 async def update_agent(
     agent_id: uuid.UUID,
     data: AgentUpdate,
@@ -130,7 +135,8 @@ async def update_agent(
     return AgentResponse.model_validate(agent)
 
 
-@router.delete("/{agent_id}", status_code=204, dependencies=[Depends(check_rate_limit)])
+@router.delete("/{agent_id}", status_code=204, dependencies=[Depends(check_rate_limit)],
+               responses=OWNER_ERRORS)
 async def deactivate_agent(
     agent_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -147,6 +153,7 @@ async def deactivate_agent(
 @router.get(
     "/{agent_id}/agent-card",
     dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
 )
 async def get_agent_card(
     agent_id: uuid.UUID,
@@ -164,6 +171,7 @@ async def get_agent_card(
     "/{agent_id}/reputation",
     response_model=ReputationResponse,
     dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
 )
 async def get_reputation(
     agent_id: uuid.UUID,
@@ -173,7 +181,8 @@ async def get_reputation(
     return await review_service.get_reputation(db, agent_id)
 
 
-@router.get("/{agent_id}/balance", response_model=BalanceResponse, dependencies=[Depends(check_rate_limit)])
+@router.get("/{agent_id}/balance", response_model=BalanceResponse, dependencies=[Depends(check_rate_limit)],
+            responses=OWNER_ERRORS)
 async def get_balance(
     agent_id: uuid.UUID,
     auth: AuthenticatedAgent = Depends(verify_request),
@@ -192,7 +201,8 @@ from pydantic import BaseModel as _BaseModel
 class DevDepositRequest(_BaseModel):
     amount: str
 
-@router.post("/{agent_id}/deposit", response_model=BalanceResponse, dependencies=[Depends(check_rate_limit)])
+@router.post("/{agent_id}/deposit", response_model=BalanceResponse, dependencies=[Depends(check_rate_limit)],
+             responses=OWNER_ERRORS)
 async def dev_deposit(
     agent_id: uuid.UUID,
     data: DevDepositRequest,

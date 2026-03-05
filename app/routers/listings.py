@@ -10,6 +10,7 @@ from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
 from app.schemas.listing import ListingCreate, ListingResponse, ListingUpdate
 from app.schemas.pagination import PaginatedResponse
+from app.schemas.errors import OWNER_ERRORS, PUBLIC_ERRORS
 from app.services import listing as listing_service
 
 router = APIRouter(tags=["listings"])
@@ -19,6 +20,7 @@ router = APIRouter(tags=["listings"])
     "/agents/{agent_id}/listings",
     response_model=ListingResponse,
     status_code=201,
+    responses=OWNER_ERRORS,
 )
 async def create_listing(
     agent_id: uuid.UUID,
@@ -38,6 +40,7 @@ async def create_listing(
     "/listings/{listing_id}",
     response_model=ListingResponse,
     dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
 )
 async def get_listing(
     listing_id: uuid.UUID,
@@ -48,7 +51,7 @@ async def get_listing(
     return ListingResponse.model_validate(listing)
 
 
-@router.patch("/listings/{listing_id}", response_model=ListingResponse)
+@router.patch("/listings/{listing_id}", response_model=ListingResponse, responses=OWNER_ERRORS)
 async def update_listing(
     listing_id: uuid.UUID,
     data: ListingUpdate,
@@ -64,6 +67,7 @@ async def update_listing(
     "/listings",
     response_model=PaginatedResponse[ListingResponse],
     dependencies=[Depends(check_rate_limit)],
+    responses={429: {"description": "Rate limit exceeded"}},
 )
 async def browse_listings(
     skill_id: str | None = Query(None),

@@ -18,6 +18,7 @@ router = APIRouter(tags=["discovery"])
     "/discover",
     response_model=PaginatedResponse[DiscoverResult],
     dependencies=[Depends(check_rate_limit)],
+    responses={429: {"description": "Rate limit exceeded"}},
 )
 async def discover(
     skill_id: str | None = Query(None),

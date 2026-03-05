@@ -386,16 +386,44 @@ async def _process_withdrawal(withdrawal_id: uuid.UUID) -> None:
             signed = treasury.sign_transaction(tx)
             tx_hash = await w3.eth.send_raw_transaction(signed.raw_transaction)
 
-            # Persist tx_hash IMMEDIATELY before marking completed —
+            # Persist tx_hash IMMEDIATELY before waiting for receipt —
             # this is the critical idempotency point. If we crash after this commit
-            # but before the next, recovery will find the tx_hash and check on-chain.
+            # but before the receipt check, recovery will find the tx_hash and
+            # check on-chain status instead of re-sending.
             withdrawal.tx_hash = tx_hash.hex()
             await db.commit()
 
-            # Now wait for confirmation
-            withdrawal.status = WithdrawalStatus.COMPLETED
-            withdrawal.processed_at = datetime.now(UTC)
-            await db.commit()
+            # Wait for on-chain confirmation before marking complete
+            try:
+                receipt = await w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            except Exception as receipt_err:
+                # Timeout or RPC error — leave as PROCESSING for recovery
+                logger.warning(
+                    "Withdrawal %s: receipt wait failed for tx %s: %s — will retry on recovery",
+                    withdrawal.withdrawal_id, withdrawal.tx_hash, receipt_err,
+                )
+                return
+
+            if receipt.status == 1:
+                withdrawal.status = WithdrawalStatus.COMPLETED
+                withdrawal.processed_at = datetime.now(UTC)
+                await db.commit()
+            else:
+                # On-chain revert — refund agent
+                withdrawal.status = WithdrawalStatus.FAILED
+                withdrawal.error_message = "Transaction reverted on-chain"
+                withdrawal.processed_at = datetime.now(UTC)
+                agent_result = await db.execute(
+                    select(Agent).where(Agent.agent_id == withdrawal.agent_id).with_for_update()
+                )
+                agent = agent_result.scalar_one()
+                agent.balance = agent.balance + withdrawal.amount
+                await db.commit()
+                logger.error(
+                    "Withdrawal %s reverted on-chain (tx=%s) — refunded %s to agent %s",
+                    withdrawal.withdrawal_id, withdrawal.tx_hash, withdrawal.amount, withdrawal.agent_id,
+                )
+                return
 
             logger.info(
                 "Withdrawal %s completed: tx=%s amount=%s",

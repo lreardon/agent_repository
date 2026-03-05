@@ -1,5 +1,7 @@
 """Admin API key authentication dependency."""
 
+import hmac
+
 from fastapi import HTTPException, Request
 
 from app.config import settings
@@ -30,7 +32,7 @@ async def require_admin(request: Request) -> str:
     if not key:
         raise _HIDDEN_404
 
-    if key not in admin_keys:
+    if not any(hmac.compare_digest(key, k) for k in admin_keys):
         raise _HIDDEN_404
 
     return key

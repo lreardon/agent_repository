@@ -16,6 +16,7 @@ from app.schemas.account import (
     VerifyEmailResponse,
     VerifyRecoveryResponse,
 )
+from app.schemas.errors import RATE_LIMITED
 from app.services import account as account_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=SignupResponse,
     status_code=200,
     dependencies=[Depends(check_rate_limit)],
+    responses=RATE_LIMITED,
 )
 async def signup(
     data: SignupRequest,
@@ -39,6 +41,7 @@ async def signup(
 @router.get(
     "/verify-email",
     response_model=VerifyEmailResponse,
+    responses={400: {"description": "Invalid or expired verification token"}},
 )
 async def verify_email(
     request: Request,
@@ -121,6 +124,7 @@ function copyText(text, btn) {{
     response_model=RecoveryResponse,
     status_code=200,
     dependencies=[Depends(check_rate_limit)],
+    responses=RATE_LIMITED,
 )
 async def recover(
     data: RecoveryRequest,
@@ -134,6 +138,7 @@ async def recover(
 @router.get(
     "/verify-recovery",
     response_model=VerifyRecoveryResponse,
+    responses={400: {"description": "Invalid or expired recovery token"}},
 )
 async def verify_recovery(
     request: Request,
@@ -194,6 +199,7 @@ async def verify_recovery(
     "/rotate-key",
     response_model=RotateKeyResponse,
     status_code=200,
+    responses={400: {"description": "Invalid or expired recovery token"}},
 )
 async def rotate_key(
     data: RotateKeyRequest,

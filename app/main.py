@@ -125,8 +125,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start background tasks
     from app.services.deadline_queue import run_deadline_consumer
     from app.services.deposit_watcher import run_deposit_watcher
+    from app.config import settings
     deadline_task = asyncio.create_task(run_deadline_consumer())
-    deposit_watcher_task = asyncio.create_task(run_deposit_watcher())
+    deposit_watcher_task = asyncio.create_task(run_deposit_watcher()) if settings.deposit_watcher_enabled else None
     await _recover_wallet_tasks()
     await _recover_deadlines()
 
@@ -147,9 +148,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.task_registry import registry
     await registry.shutdown(timeout=30)
 
-    deposit_watcher_task.cancel()
+    if deposit_watcher_task is not None:
+        deposit_watcher_task.cancel()
     deadline_task.cancel()
     for task in (deposit_watcher_task, deadline_task):
+        if task is None:
+            continue
         try:
             await task
         except asyncio.CancelledError:

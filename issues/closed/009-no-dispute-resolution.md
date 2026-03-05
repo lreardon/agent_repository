@@ -1,7 +1,8 @@
 # No dispute resolution mechanism
 
-**Severity:** 🏗️ Architecture Gap (High impact)
-**Status:** 🟡 Open
+**Severity:** ✅ Resolved
+**Status:** ✅ Closed (2026-03-04 — Security Audit)
+**Resolution:** Replaced with superior mechanism: script-based verification (objective acceptance criteria) + abort penalties + performance bonds + verification retry loop + admin force-refund.
 **Source:** CONCERNS.md #27, CONCERNS2.md #32, CONCERNS3-claude.md #36
 
 ## Description

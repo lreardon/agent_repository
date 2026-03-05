@@ -40,8 +40,8 @@ class DepositTransactionResponse(BaseModel):
 
 
 class WithdrawalCreateRequest(BaseModel):
-    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
-    destination_address: str = Field(..., min_length=42, max_length=42)
+    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2, description="Withdrawal amount in USDC (min $1, max $100,000)")
+    destination_address: str = Field(..., min_length=42, max_length=42, description="Ethereum address (0x + 40 hex chars)")
 
     @field_validator("amount")
     @classmethod
@@ -92,7 +92,7 @@ class AvailableBalanceResponse(BaseModel):
 
 
 class DepositNotifyRequest(BaseModel):
-    tx_hash: str = Field(..., min_length=64, max_length=66)
+    tx_hash: str = Field(..., min_length=64, max_length=66, description="On-chain transaction hash (64 hex chars, optional 0x prefix)")
 
     @field_validator("tx_hash")
     @classmethod

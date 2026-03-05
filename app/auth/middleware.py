@@ -52,6 +52,13 @@ async def verify_request(
         raise HTTPException(status_code=403, detail="Request timestamp expired")
 
     # Check nonce (replay protection)
+    # Nonce is REQUIRED for mutating requests to prevent replay attacks.
+    # GET/HEAD/OPTIONS are idempotent and nonce-optional.
+    if not nonce and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        raise HTTPException(
+            status_code=403,
+            detail="X-Nonce header is required for mutating requests",
+        )
     if nonce:
         nonce_key = f"nonce:{nonce}"
         already_used = await redis.set(nonce_key, "1", nx=True, ex=settings.nonce_ttl_seconds)

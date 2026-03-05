@@ -221,8 +221,8 @@ async def test_signature_wrong_path(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_auth_without_nonce_succeeds(client: AsyncClient) -> None:
-    """AU1: Missing X-Nonce header — request still succeeds (nonce is optional)."""
+async def test_auth_without_nonce_succeeds_for_get(client: AsyncClient) -> None:
+    """AU1: Missing X-Nonce header on GET — request still succeeds (nonce optional for reads)."""
     agent_id, priv = await _create_agent(client)
 
     timestamp = datetime.now(UTC).isoformat()
@@ -237,6 +237,75 @@ async def test_auth_without_nonce_succeeds(client: AsyncClient) -> None:
         },
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_auth_without_nonce_rejected_for_post(client: AsyncClient) -> None:
+    """C1 fix: Missing X-Nonce header on POST — request rejected (nonce required for mutations)."""
+    agent_id, priv = await _create_agent(client)
+
+    data = {"amount": "10.00"}
+    body_bytes = json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
+    timestamp = datetime.now(UTC).isoformat()
+    path = f"/agents/{agent_id}/deposit"
+    signature = sign_request(priv, timestamp, "POST", path, body_bytes)
+
+    resp = await client.post(
+        path,
+        json=data,
+        headers={
+            "Authorization": f"AgentSig {agent_id}:{signature}",
+            "X-Timestamp": timestamp,
+            # No X-Nonce header — should be rejected for POST
+        },
+    )
+    assert resp.status_code == 403
+    assert "X-Nonce" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_auth_without_nonce_rejected_for_delete(client: AsyncClient) -> None:
+    """C1 fix: Missing X-Nonce on DELETE — rejected."""
+    agent_id, priv = await _create_agent(client)
+
+    timestamp = datetime.now(UTC).isoformat()
+    path = f"/agents/{agent_id}"
+    signature = sign_request(priv, timestamp, "DELETE", path, b"")
+
+    resp = await client.delete(
+        path,
+        headers={
+            "Authorization": f"AgentSig {agent_id}:{signature}",
+            "X-Timestamp": timestamp,
+            # No X-Nonce
+        },
+    )
+    assert resp.status_code == 403
+    assert "X-Nonce" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_auth_without_nonce_rejected_for_patch(client: AsyncClient) -> None:
+    """C1 fix: Missing X-Nonce on PATCH — rejected."""
+    agent_id, priv = await _create_agent(client)
+
+    data = {"display_name": "Updated Name"}
+    body_bytes = json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
+    timestamp = datetime.now(UTC).isoformat()
+    path = f"/agents/{agent_id}"
+    signature = sign_request(priv, timestamp, "PATCH", path, body_bytes)
+
+    resp = await client.patch(
+        path,
+        json=data,
+        headers={
+            "Authorization": f"AgentSig {agent_id}:{signature}",
+            "X-Timestamp": timestamp,
+            # No X-Nonce
+        },
+    )
+    assert resp.status_code == 403
+    assert "X-Nonce" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

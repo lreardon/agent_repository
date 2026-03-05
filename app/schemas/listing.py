@@ -11,12 +11,12 @@ _CAPABILITY_PATTERN = re.compile(r"^[a-zA-Z0-9-]+$")
 
 
 class ListingCreate(BaseModel):
-    skill_id: str = Field(..., min_length=1, max_length=64)
-    description: str | None = Field(None, max_length=4096)
-    price_model: str = Field(..., pattern=r"^(per_call|per_unit|per_hour|flat)$")
-    base_price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
-    currency: str = Field("credits", max_length=16)
-    sla: dict | None = None
+    skill_id: str = Field(..., min_length=1, max_length=64, description="Skill identifier (alphanumeric + hyphens)")
+    description: str | None = Field(None, max_length=4096, description="Listing description")
+    price_model: str = Field(..., pattern=r"^(per_call|per_unit|per_hour|flat)$", description="Pricing model")
+    base_price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2, description="Base price in credits")
+    currency: str = Field("credits", max_length=16, description="Currency (default: credits)")
+    sla: dict | None = Field(None, description="Service level agreement terms")
 
     @field_validator("skill_id")
     @classmethod

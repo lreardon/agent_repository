@@ -7,9 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ReviewCreate(BaseModel):
-    rating: int = Field(..., ge=1, le=5)
-    tags: list[str] | None = Field(None, max_length=10)
-    comment: str | None = Field(None, max_length=4096)
+    rating: int = Field(..., ge=1, le=5, description="Rating from 1 (worst) to 5 (best)")
+    tags: list[str] | None = Field(None, max_length=10, description="Optional tags (e.g. 'fast', 'reliable')")
+    comment: str | None = Field(None, max_length=4096, description="Optional review comment")
 
     @field_validator("tags")
     @classmethod

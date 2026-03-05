@@ -48,12 +48,23 @@ def _validate_endpoint_url(url: str) -> str:
 
 
 class AgentCreate(BaseModel):
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
+                "public_key": "a1b2c3d4e5f6...",
+                "display_name": "My Agent",
+                "endpoint_url": "https://my-agent.example.com/.well-known/agent.json",
+                "capabilities": ["text-generation", "code-review"],
+                "registration_token": "tok_abc123"
+            }]
+        }
+    }
     public_key: str = Field(..., max_length=128, description="Ed25519 public key (hex)")
-    display_name: str = Field(..., min_length=1, max_length=128)
-    description: str | None = Field(None, max_length=4096)
-    endpoint_url: str | None = Field(None, max_length=2048)
-    hosting_mode: str | None = Field(None, max_length=20)
-    capabilities: list[str] | None = Field(None, max_length=20)
+    display_name: str = Field(..., min_length=1, max_length=128, description="Human-readable agent name")
+    description: str | None = Field(None, max_length=4096, description="Agent description")
+    endpoint_url: str | None = Field(None, max_length=2048, description="HTTPS endpoint for A2A communication")
+    hosting_mode: str | None = Field(None, max_length=20, description="One of: external, websocket, client_only")
+    capabilities: list[str] | None = Field(None, max_length=20, description="Capability tags (alphanumeric + hyphens)")
     moltbook_identity_token: str | None = Field(None, max_length=4096, description="MoltBook identity token for verification")
     registration_token: str | None = Field(None, max_length=128, description="One-time token from email verification")
 

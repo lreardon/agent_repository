@@ -672,6 +672,165 @@ async def test_process_withdrawal_idempotent_with_existing_tx_hash(
     assert agent_result2.scalar_one().balance == Decimal("0.00")
 
 
+def _make_mock_w3(receipt_status: int | None = 1, receipt_side_effect: Exception | None = None):
+    """Build a mock AsyncWeb3 instance for withdrawal tests.
+
+    Args:
+        receipt_status: Transaction receipt status (1=success, 0=revert). Ignored if receipt_side_effect is set.
+        receipt_side_effect: Exception to raise from wait_for_transaction_receipt (e.g. TimeoutError).
+    """
+    mock_receipt = MagicMock()
+    mock_receipt.status = receipt_status
+
+    # Use AsyncMock for eth so attribute access returns awaitables where needed
+    async def _gas_price():
+        return 1_000_000_000
+
+    async def _max_priority_fee():
+        return 100_000_000
+
+    mock_eth = MagicMock()
+    mock_eth.get_transaction_count = AsyncMock(return_value=0)
+    # These are awaited as coroutine properties in web3
+    type(mock_eth).gas_price = property(lambda self: _gas_price())
+    type(mock_eth).max_priority_fee = property(lambda self: _max_priority_fee())
+    mock_eth.send_raw_transaction = AsyncMock(return_value=b"\xab" * 32)
+    if receipt_side_effect:
+        mock_eth.wait_for_transaction_receipt = AsyncMock(side_effect=receipt_side_effect)
+    else:
+        mock_eth.wait_for_transaction_receipt = AsyncMock(return_value=mock_receipt)
+
+    mock_contract = MagicMock()
+    mock_contract.functions.transfer.return_value.build_transaction = AsyncMock(
+        return_value={"from": "0x" + "00" * 20, "nonce": 0, "chainId": 84532, "gas": 100000}
+    )
+    mock_eth.contract.return_value = mock_contract
+
+    mock_w3 = MagicMock()
+    mock_w3.eth = mock_eth
+    mock_w3.to_checksum_address = lambda x: x
+
+    return mock_w3
+
+
+async def _setup_fresh_withdrawal(client, db_session, amount="10.00"):
+    """Create agent, deposit, zero balance, create PENDING withdrawal. Returns (agent_id, withdrawal_id)."""
+    agent_id, priv = await _create_agent(client)
+    await _deposit(client, agent_id, priv, amount)
+
+    agent_result = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    agent = agent_result.scalar_one()
+    agent.balance = Decimal("0.00")
+
+    withdrawal = WithdrawalRequest(
+        withdrawal_id=uuid.uuid4(),
+        agent_id=uuid.UUID(agent_id),
+        amount=Decimal(amount),
+        fee=Decimal("0.50"),
+        net_payout=Decimal(amount) - Decimal("0.50"),
+        destination_address=VALID_ETH_ADDRESS,
+        status=WithdrawalStatus.PENDING,
+    )
+    db_session.add(withdrawal)
+    await db_session.commit()
+    return agent_id, withdrawal.withdrawal_id
+
+
+def _withdrawal_patches(mock_w3, db_session):
+    """Context manager stack for _process_withdrawal mocks."""
+    from contextlib import ExitStack
+    stack = ExitStack()
+
+    mock_account = MagicMock()
+    mock_account.address = "0x" + "00" * 20
+    mock_account.sign_transaction.return_value = MagicMock(raw_transaction=b"\x00" * 100)
+
+    stack.enter_context(patch("app.services.secrets.get_treasury_key", return_value="0x" + "aa" * 32))
+    stack.enter_context(patch("app.database.async_session", return_value=db_session))
+    p = stack.enter_context(patch("eth_account.Account"))
+    p.from_key.return_value = mock_account
+    # Patch AsyncWeb3 constructor to return our mock
+    stack.enter_context(patch("web3.AsyncWeb3", return_value=mock_w3))
+
+    db_session.__aenter__ = AsyncMock(return_value=db_session)
+    db_session.__aexit__ = AsyncMock(return_value=False)
+
+    return stack
+
+
+@pytest.mark.asyncio
+async def test_process_withdrawal_waits_for_receipt(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """C2 fix: Fresh withdrawal waits for on-chain receipt before marking COMPLETED."""
+    from app.services.wallet import _process_withdrawal
+
+    agent_id, withdrawal_id = await _setup_fresh_withdrawal(client, db_session)
+    mock_w3 = _make_mock_w3(receipt_status=1)
+
+    with _withdrawal_patches(mock_w3, db_session):
+        await _process_withdrawal(withdrawal_id)
+
+    mock_w3.eth.wait_for_transaction_receipt.assert_called_once()
+
+    wd_result = await db_session.execute(
+        select(WithdrawalRequest).where(WithdrawalRequest.withdrawal_id == withdrawal_id)
+    )
+    assert wd_result.scalar_one().status == WithdrawalStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_process_withdrawal_reverted_receipt_refunds(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """C2 fix: If on-chain receipt shows revert, withdrawal is FAILED and agent refunded."""
+    from app.services.wallet import _process_withdrawal
+
+    agent_id, withdrawal_id = await _setup_fresh_withdrawal(client, db_session)
+    mock_w3 = _make_mock_w3(receipt_status=0)
+
+    with _withdrawal_patches(mock_w3, db_session):
+        await _process_withdrawal(withdrawal_id)
+
+    wd_result = await db_session.execute(
+        select(WithdrawalRequest).where(WithdrawalRequest.withdrawal_id == withdrawal_id)
+    )
+    assert wd_result.scalar_one().status == WithdrawalStatus.FAILED
+
+    agent_result = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    assert agent_result.scalar_one().balance == Decimal("10.00")
+
+
+@pytest.mark.asyncio
+async def test_process_withdrawal_receipt_timeout_leaves_processing(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """C2 fix: If receipt wait times out, withdrawal stays PROCESSING for recovery."""
+    from app.services.wallet import _process_withdrawal
+
+    agent_id, withdrawal_id = await _setup_fresh_withdrawal(client, db_session)
+    mock_w3 = _make_mock_w3(receipt_side_effect=TimeoutError("receipt timeout"))
+
+    with _withdrawal_patches(mock_w3, db_session):
+        await _process_withdrawal(withdrawal_id)
+
+    wd_result = await db_session.execute(
+        select(WithdrawalRequest).where(WithdrawalRequest.withdrawal_id == withdrawal_id)
+    )
+    wd = wd_result.scalar_one()
+    assert wd.status == WithdrawalStatus.PROCESSING
+    assert wd.tx_hash is not None
+
+    agent_result = await db_session.execute(
+        select(Agent).where(Agent.agent_id == uuid.UUID(agent_id))
+    )
+    assert agent_result.scalar_one().balance == Decimal("0.00")
+
+
 @pytest.mark.asyncio
 async def test_process_withdrawal_idempotent_failed_tx(
     client: AsyncClient, db_session: AsyncSession,

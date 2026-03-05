@@ -23,15 +23,15 @@ class JobProposal(BaseModel):
     Exit code 0 = pass (escrow released), non-zero = fail (escrow refunded).
     Scripts run in isolated Docker containers with no network access.
     """
-    seller_agent_id: uuid.UUID
-    listing_id: uuid.UUID | None = None
-    acceptance_criteria: dict | None = None
-    requirements: dict | None = None
-    max_budget: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
-    client_abort_penalty: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
-    seller_abort_penalty: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2)
-    delivery_deadline: datetime | None = None
-    max_rounds: int = Field(5, ge=1, le=20)
+    seller_agent_id: uuid.UUID = Field(..., description="Agent ID of the seller")
+    listing_id: uuid.UUID | None = Field(None, description="Optional listing to reference")
+    acceptance_criteria: dict | None = Field(None, description="Script-based verification criteria")
+    requirements: dict | None = Field(None, description="Free-form job requirements")
+    max_budget: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2, description="Maximum budget in credits")
+    client_abort_penalty: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2, description="Penalty if client aborts")
+    seller_abort_penalty: Decimal = Field(Decimal("0.00"), ge=0, max_digits=12, decimal_places=2, description="Penalty (performance bond) if seller aborts")
+    delivery_deadline: datetime | None = Field(None, description="ISO 8601 deadline for delivery")
+    max_rounds: int = Field(5, ge=1, le=20, description="Maximum negotiation rounds")
 
     @field_validator("acceptance_criteria")
     @classmethod

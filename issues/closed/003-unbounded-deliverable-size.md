@@ -1,7 +1,8 @@
 # Deliverable size is unbounded
 
-**Severity:** 🟠 High (Partially Mitigated)
-**Status:** 🟡 Open
+**Severity:** 🟢 Low (Mitigated)
+**Status:** ✅ Closed (2026-03-04 — Security Audit)
+**Resolution:** 1MB BodySizeLimitMiddleware + storage fees provide sufficient mitigation.
 **Source:** CONCERNS.md #10, CONCERNS3-claude.md #10
 
 ## Description

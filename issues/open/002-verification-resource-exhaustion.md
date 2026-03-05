@@ -1,6 +1,6 @@
 # Verification script resource exhaustion attack
 
-**Severity:** 🟠 High (Partially Mitigated)
+**Severity:** 🟢 Low (Substantially Mitigated — fee model + K8s quota + email gate)
 **Status:** 🟡 Open
 **Source:** CONCERNS.md #9, CONCERNS3-claude.md #9
 

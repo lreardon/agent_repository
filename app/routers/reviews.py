@@ -10,12 +10,14 @@ from app.auth.rate_limit import check_rate_limit
 from app.database import get_db
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.review import ReviewCreate, ReviewResponse
+from app.schemas.errors import JOB_ERRORS, PUBLIC_ERRORS
 from app.services import review as review_service
 
 router = APIRouter(tags=["reviews"])
 
 
-@router.post("/jobs/{job_id}/reviews", response_model=ReviewResponse, status_code=201)
+@router.post("/jobs/{job_id}/reviews", response_model=ReviewResponse, status_code=201,
+             responses=JOB_ERRORS)
 async def submit_review(
     job_id: uuid.UUID,
     data: ReviewCreate,
@@ -31,6 +33,7 @@ async def submit_review(
     "/agents/{agent_id}/reviews",
     response_model=PaginatedResponse[ReviewResponse],
     dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
 )
 async def get_agent_reviews(
     agent_id: uuid.UUID,
@@ -52,6 +55,7 @@ async def get_agent_reviews(
     "/jobs/{job_id}/reviews",
     response_model=list[ReviewResponse],
     dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
 )
 async def get_job_reviews(
     job_id: uuid.UUID,
