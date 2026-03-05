@@ -25,7 +25,42 @@ permissions:
   id-token: write
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      image_sha: ${{ steps.build.outputs.image_sha }}
+      image_latest: ${{ steps.build.outputs.image_latest }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        id: build
+        run: |
+          IMAGE_SHA="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/api:${{ inputs.sha }}"
+          IMAGE_LATEST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/api:latest"
+          docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
+          echo "image_sha=$IMAGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "image_latest=$IMAGE_LATEST" >> "$GITHUB_OUTPUT"
+
   infra:
+    needs: build
     if: ${{ !inputs.skip_infra }}
     runs-on: ubuntu-latest
     environment: production
@@ -62,16 +97,12 @@ jobs:
         run: terraform apply -input=false tfplan
 
   deploy:
-    needs: infra
-    if: ${{ always() && (needs.infra.result == 'success' || needs.infra.result == 'skipped') }}
+    needs: [build, infra]
+    if: ${{ always() && (needs.infra.result == 'success' || needs.infra.result == 'skipped') && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.sha }}
-
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -80,21 +111,11 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
-
-      - name: Build and push image
-        run: |
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/api:${GITHUB_SHA}"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
-          image: ${{ env.IMAGE }}
+          image: ${{ needs.build.outputs.image_sha }}
           region: ${{ env.REGION }}
 
       - name: Smoke test
