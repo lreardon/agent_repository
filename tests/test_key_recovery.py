@@ -293,6 +293,14 @@ async def test_verify_recovery_html_response(client_with_email_required):
     assert "text/html" in resp.headers["content-type"]
     assert "Recovery Verified" in resp.text
     assert "rotate-key" in resp.text
+    # AUTH-7: Verify a recovery token value appears in the HTML (issued by verify_recovery,
+    # different from the verification token used in the URL)
+    assert '<div class="token">' in resp.text
+    # The token div should contain a non-empty value (the issued recovery token)
+    import re
+    token_match = re.search(r'<div class="token">(.+?)</div>', resp.text)
+    assert token_match is not None, "Recovery token div should contain a value"
+    assert len(token_match.group(1).strip()) > 20, "Recovery token should be a substantial string"
 
 
 @pytest.mark.asyncio

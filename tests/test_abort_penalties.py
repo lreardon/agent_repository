@@ -452,6 +452,31 @@ async def test_zero_penalty_job(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_abort_from_funded_state(client: AsyncClient) -> None:
+    """ABT-3: Abort from FUNDED state (before start) should succeed and return funds."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "100.00")
+
+    job_id = await _fund_job_with_penalties(
+        client, client_id, client_priv, seller_id, seller_priv,
+        budget="100.00", client_abort_penalty="10.00", seller_abort_penalty="20.00",
+    )
+
+    # Abort WITHOUT starting (job is in FUNDED state)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/abort", b"")
+    resp = await client.post(f"/jobs/{job_id}/abort", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+    # Client: 500 - 100 escrowed + 90 back (100 - 10 penalty) = 490
+    assert await _get_balance(client, client_id, client_priv) == Decimal("490.00")
+    # Seller: 100 - 20 bond + 10 penalty + 20 bond back = 110
+    assert await _get_balance(client, seller_id, seller_priv) == Decimal("110.00")
+
+
+@pytest.mark.asyncio
 async def test_abort_from_proposed_rejected(client: AsyncClient) -> None:
     """Cannot abort a job that isn't funded yet."""
     client_id, client_priv = await _create_agent(client)

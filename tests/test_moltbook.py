@@ -153,9 +153,10 @@ async def test_register_moltbook_no_api_key_configured(client: AsyncClient) -> N
 
 
 @pytest.mark.asyncio
-async def test_register_moltbook_low_karma_currently_allowed(client: AsyncClient) -> None:
+async def test_register_moltbook_low_karma_enforcement_not_implemented(client: AsyncClient) -> None:
     """MB1: moltbook_min_karma config exists but enforcement is not yet implemented.
-    Low-karma agents can currently register successfully (known gap — TODO).
+    Low-karma agents can currently register successfully.
+    TODO: Implement karma threshold enforcement in register_agent() and update this test.
     """
     from unittest.mock import AsyncMock, patch
     from app.services.moltbook import MoltBookProfile

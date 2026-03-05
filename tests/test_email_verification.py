@@ -355,6 +355,56 @@ async def test_recovery_token_cannot_verify_email(client_with_email_required):
 
 
 @pytest.mark.asyncio
+async def test_registration_token_not_reusable_after_deactivation(client_with_email_required):
+    """AUTH-3 / L4: Register an agent, deactivate it, then try to reuse the same
+    registration token. Documents current behaviour: the account already has an
+    agent record (even if deactivated), so the token cannot be used again.
+    """
+    client, db = client_with_email_required
+
+    reg_token = secrets.token_urlsafe(48)
+    account = Account(
+        account_id=uuid.uuid4(),
+        email="deactivate-reuse@example.com",
+        email_verified=True,
+    )
+    db.add(account)
+    verification = EmailVerification(
+        verification_id=uuid.uuid4(),
+        email="deactivate-reuse@example.com",
+        token=secrets.token_urlsafe(48),
+        registration_token=reg_token,
+        registration_token_expires_at=datetime.now(UTC) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
+        used=True,
+    )
+    db.add(verification)
+    await db.commit()
+
+    # Register with the token
+    priv1, pk1 = generate_keypair()
+    agent_data1 = make_agent_data(pk1)
+    agent_data1["registration_token"] = reg_token
+    resp = await client.post("/agents", json=agent_data1)
+    assert resp.status_code == 201
+    agent_id = resp.json()["agent_id"]
+
+    # Deactivate the agent
+    from tests.conftest import make_auth_headers
+    headers = make_auth_headers(agent_id, priv1, "DELETE", f"/agents/{agent_id}")
+    resp = await client.delete(f"/agents/{agent_id}", headers=headers)
+    assert resp.status_code == 204
+
+    # Attempt to reuse the registration token — should fail (account already has agent)
+    _, pk2 = generate_keypair()
+    agent_data2 = make_agent_data(pk2)
+    agent_data2["registration_token"] = reg_token
+    resp = await client.post("/agents", json=agent_data2)
+    assert resp.status_code == 409
+    assert "already has an active agent" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_register_works_without_email_when_not_required(client):
     """When email_verification_required=False, registration works as before (no token needed)."""
     # client fixture from conftest.py has email_verification_required=False (default)

@@ -94,6 +94,7 @@ async def test_update_agent_wrong_owner(client: AsyncClient) -> None:
     assert resp.status_code == 403
 
 
+# Note: Missing auth returns 403 (not 401) by design — middleware always returns 403
 @pytest.mark.asyncio
 async def test_update_agent_no_auth(client: AsyncClient) -> None:
     """Updating without auth returns 403."""
@@ -143,6 +144,7 @@ async def test_deposit_and_balance(client: AsyncClient) -> None:
     assert resp.json()["balance"] == "100.50"
 
 
+# Note: Missing auth returns 403 (not 401) by design — middleware always returns 403
 @pytest.mark.asyncio
 async def test_balance_no_auth(client: AsyncClient) -> None:
     """Checking balance without auth returns 403."""
