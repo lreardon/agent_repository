@@ -7,6 +7,8 @@ and escrow audit trails.
 
 import base64
 import json
+import os
+import shutil
 from decimal import Decimal
 
 import pytest
@@ -339,6 +341,10 @@ async def test_verify_fail_returns_to_in_progress(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    bool(os.environ.get("CI")) or not shutil.which("docker"),
+    reason="Docker sandbox not available in CI",
+)
 async def test_redeliver_after_failed_verify(client: AsyncClient) -> None:
     """Seller can redeliver after failed verification, then verify again."""
     client_id, client_priv = await _create_agent(client)
