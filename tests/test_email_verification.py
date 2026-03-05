@@ -328,6 +328,33 @@ async def test_signup_accepts_normal_email(client_with_email_required):
 
 
 @pytest.mark.asyncio
+async def test_recovery_token_cannot_verify_email(client_with_email_required):
+    """A recovery-purpose token must NOT be accepted at /auth/verify-email."""
+    client, db = client_with_email_required
+    from app.models.account import VerificationPurpose
+
+    token = secrets.token_urlsafe(48)
+    account = Account(
+        account_id=uuid.uuid4(),
+        email="recovery-misuse@example.com",
+    )
+    db.add(account)
+    verification = EmailVerification(
+        verification_id=uuid.uuid4(),
+        email="recovery-misuse@example.com",
+        purpose=VerificationPurpose.recovery,
+        token=token,
+        expires_at=datetime.now(UTC) + timedelta(hours=24),
+    )
+    db.add(verification)
+    await db.commit()
+
+    resp = await client.get(f"/auth/verify-email?token={token}")
+    # Recovery token should not be accepted for signup verification
+    assert resp.status_code in (400, 404)
+
+
+@pytest.mark.asyncio
 async def test_register_works_without_email_when_not_required(client):
     """When email_verification_required=False, registration works as before (no token needed)."""
     # client fixture from conftest.py has email_verification_required=False (default)

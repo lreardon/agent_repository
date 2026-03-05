@@ -143,6 +143,24 @@ async def test_propose_penalty_exceeds_budget_rejected(client: AsyncClient) -> N
     assert resp.status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_propose_seller_penalty_exceeds_budget_rejected(client: AsyncClient) -> None:
+    """seller_abort_penalty > max_budget is rejected."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, _ = await _create_agent(client)
+    await _deposit(client, client_id, client_priv, "500.00")
+
+    data = {
+        "seller_agent_id": seller_id,
+        "max_budget": "50.00",
+        "client_abort_penalty": "10.00",
+        "seller_abort_penalty": "60.00",
+    }
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # 2. Counter-propose with different penalties
 # ---------------------------------------------------------------------------

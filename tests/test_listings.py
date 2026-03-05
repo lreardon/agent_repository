@@ -404,6 +404,29 @@ async def test_discover_deactivated_agent_excluded(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_browse_listings_excludes_deactivated(client: AsyncClient) -> None:
+    """Browse listings excludes listings from deactivated agents."""
+    priv, pub = generate_keypair()
+    resp = await client.post("/agents", json=make_agent_data(pub))
+    agent_id = resp.json()["agent_id"]
+
+    data = _listing_data()
+    data["skill_id"] = "browse-deactivate"
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
+    resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
+    listing_id = resp.json()["listing_id"]
+
+    # Deactivate the agent
+    headers = make_auth_headers(agent_id, priv, "DELETE", f"/agents/{agent_id}")
+    await client.delete(f"/agents/{agent_id}", headers=headers)
+
+    # Browse should exclude
+    resp = await client.get("/listings")
+    ids = [r["listing_id"] for r in resp.json()["items"]]
+    assert listing_id not in ids
+
+
+@pytest.mark.asyncio
 async def test_discover_pagination(client: AsyncClient) -> None:
     """D5: Discover with offset and limit."""
     priv, pub = generate_keypair()

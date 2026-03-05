@@ -310,20 +310,122 @@ async def test_complete_rejects_non_client(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_escrow_audit_log_populated(db_session) -> None:
-    """E7: Escrow audit log entries created correctly for fund operations."""
-    from sqlalchemy import select as sa_select
-    from app.models.escrow import EscrowAuditLog
+async def test_refund_returns_seller_bond(client: AsyncClient) -> None:
+    """Refund returns seller bond when job fails (seller_abort_penalty > 0)."""
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
 
-    # After all the tests above run with fund/release/refund, verify audit log has entries
-    result = await db_session.execute(sa_select(EscrowAuditLog))
-    logs = list(result.scalars().all())
-    # Just verify audit log table is populated (entries created by fund/release/refund flows)
-    # Specific counts depend on test isolation, so just check structure
-    if logs:
-        assert logs[0].escrow_id is not None
-        assert logs[0].action is not None
-        assert logs[0].amount is not None
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "100.00")
+
+    # Propose with seller_abort_penalty (bond)
+    data = {
+        "seller_agent_id": seller_id,
+        "max_budget": "100.00",
+        "client_abort_penalty": "0.00",
+        "seller_abort_penalty": "20.00",
+    }
+    headers = make_auth_headers(client_id, client_priv, "POST", "/jobs", data)
+    resp = await client.post("/jobs", json=data, headers=headers)
+    assert resp.status_code == 201
+    job_id = resp.json()["job_id"]
+
+    # Seller accepts
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/accept", b"")
+    resp = await client.post(f"/jobs/{job_id}/accept", headers=headers)
+    assert resp.status_code == 200
+
+    # Fund (collects seller bond)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    assert resp.status_code == 200
+
+    # Seller: 100 - 20 (bond) = 80
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
+    resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "80.00"
+
+    # Start
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    # Deliver
+    deliver_data = {"result": {"data": "bad output"}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+
+    # Fail (triggers refund)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fail", b"")
+    resp = await client.post(f"/jobs/{job_id}/fail", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "failed"
+
+    # Client gets full escrow refund
+    headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
+    resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "500.00"
+
+    # Seller gets bond back: 80 + 20 = 100 (minus storage fee of 0.01)
+    headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
+    resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
+    assert resp.json()["balance"] == "99.99"
+
+
+@pytest.mark.asyncio
+async def test_escrow_audit_log_populated(client: AsyncClient, db_session) -> None:
+    """E7: Escrow audit log entries created for a full fund→deliver→complete flow."""
+    import uuid as _uuid
+    from sqlalchemy import select as sa_select
+    from app.models.escrow import EscrowAccount, EscrowAuditLog, EscrowAction
+
+    client_id, client_priv = await _create_agent(client)
+    seller_id, seller_priv = await _create_agent(client)
+
+    await _deposit(client, client_id, client_priv, "500.00")
+    await _deposit(client, seller_id, seller_priv, "10.00")
+    job_id = await _propose_and_accept(client, client_id, client_priv, seller_id, seller_priv, "100.00")
+
+    # Fund
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/fund", b"")
+    resp = await client.post(f"/jobs/{job_id}/fund", headers=headers)
+    assert resp.status_code == 200
+
+    # Start
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/start", b"")
+    await client.post(f"/jobs/{job_id}/start", headers=headers)
+
+    # Deliver
+    deliver_data = {"result": {"data": [1, 2, 3]}}
+    headers = make_auth_headers(seller_id, seller_priv, "POST", f"/jobs/{job_id}/deliver", deliver_data)
+    await client.post(f"/jobs/{job_id}/deliver", json=deliver_data, headers=headers)
+
+    # Complete (release escrow)
+    headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
+    await client.post(f"/jobs/{job_id}/complete", headers=headers)
+
+    # Query audit log for this escrow
+    escrow_result = await db_session.execute(
+        sa_select(EscrowAccount).where(EscrowAccount.job_id == _uuid.UUID(job_id))
+    )
+    escrow = escrow_result.scalar_one()
+
+    audit_result = await db_session.execute(
+        sa_select(EscrowAuditLog)
+        .where(EscrowAuditLog.escrow_id == escrow.escrow_id)
+        .order_by(EscrowAuditLog.timestamp)
+    )
+    entries = list(audit_result.scalars().all())
+    actions = [e.action for e in entries]
+
+    # Unconditional assertions — these entries MUST exist
+    assert len(entries) >= 3
+    assert EscrowAction.CREATED in actions
+    assert EscrowAction.FUNDED in actions
+    assert EscrowAction.RELEASED in actions
+    for entry in entries:
+        assert entry.escrow_id is not None
+        assert entry.action is not None
+        assert entry.amount is not None
 
 
 @pytest.mark.asyncio

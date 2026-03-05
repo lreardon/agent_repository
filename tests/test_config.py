@@ -42,7 +42,8 @@ def test_default_fee_schedule() -> None:
 
 
 def test_default_settings_testable() -> None:
-    """Default settings should have test-friendly defaults."""
-    s = Settings()
+    """Default settings have expected code defaults (independent of .env)."""
+    # Construct with explicit _env_file=None to avoid .env overrides
+    s = Settings(_env_file=None)
     assert s.env != "production"
-    assert s.require_agent_card is False  # Tests skip card fetch
+    assert s.require_agent_card is True  # Source default: Agent Card required
