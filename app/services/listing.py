@@ -43,9 +43,43 @@ async def create_listing(
         sla=data.sla,
     )
     db.add(listing)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        # Catch unique constraint violation on (seller_agent_id, skill_id, status)
+        error_str = str(e).lower()
+        if "unique" in error_str or "duplicate" in error_str or "uq_listing_seller_skill_active" in error_str:
+            raise HTTPException(
+                status_code=409,
+                detail=f"An active listing with skill_id '{data.skill_id}' already exists for this agent",
+            )
+        raise
     await db.refresh(listing)
     return listing
+
+
+async def get_agent_listings(
+    db: AsyncSession,
+    agent_id: uuid.UUID,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[Listing], int]:
+    """Get all active listings for an agent."""
+    base = (
+        select(Listing)
+        .where(Listing.seller_agent_id == agent_id)
+        .where(Listing.status == ListingStatus.ACTIVE)
+    )
+
+    count_result = await db.execute(
+        select(func.count()).select_from(base.subquery())
+    )
+    total = count_result.scalar() or 0
+
+    query = base.order_by(Listing.created_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(query)
+    return list(result.scalars().all()), total
 
 
 async def get_listing(db: AsyncSession, listing_id: uuid.UUID) -> Listing:

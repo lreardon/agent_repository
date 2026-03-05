@@ -498,13 +498,11 @@ async def test_duplicate_listing_same_skill_rejected(client: AsyncClient) -> Non
     resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
     assert resp.status_code == 201
 
-    # Second listing with same skill_id — DB unique constraint prevents this.
-    # Known issue (LST-3): IntegrityError is not caught, so the exception propagates.
-    # This test documents the constraint exists and fires correctly.
-    import sqlalchemy.exc
-    with pytest.raises(sqlalchemy.exc.IntegrityError, match="uq_listing_seller_skill_active"):
-        headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
-        await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
+    # Second listing with same skill_id — returns 409 Conflict
+    headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
+    resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

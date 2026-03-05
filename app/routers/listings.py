@@ -16,6 +16,28 @@ from app.services import listing as listing_service
 router = APIRouter(tags=["listings"])
 
 
+@router.get(
+    "/agents/{agent_id}/listings",
+    response_model=PaginatedResponse[ListingResponse],
+    dependencies=[Depends(check_rate_limit)],
+    responses=PUBLIC_ERRORS,
+)
+async def get_agent_listings(
+    agent_id: uuid.UUID,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedResponse[ListingResponse]:
+    """Get all active listings for an agent."""
+    listings, total = await listing_service.get_agent_listings(db, agent_id, limit, offset)
+    return PaginatedResponse(
+        items=[ListingResponse.model_validate(l) for l in listings],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.post(
     "/agents/{agent_id}/listings",
     response_model=ListingResponse,
