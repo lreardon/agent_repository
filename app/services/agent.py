@@ -200,6 +200,15 @@ async def update_agent(
         except AgentCardError as e:
             raise HTTPException(status_code=422, detail=f"Agent Card validation failed: {e}")
 
+    # If capabilities changed on a platform-hosted agent, regenerate the card
+    if "capabilities" in update_data and agent.hosting_mode != "external":
+        display_name = update_data.get("display_name", agent.display_name)
+        description = update_data.get("description", agent.description)
+        capabilities = update_data["capabilities"]
+        agent.a2a_agent_card = generate_platform_agent_card(
+            display_name, description, capabilities,
+        )
+
     for field, value in update_data.items():
         setattr(agent, field, value)
 
