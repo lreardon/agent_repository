@@ -41,9 +41,11 @@ def test_default_fee_schedule() -> None:
     assert float(s.fee_storage_per_kb) > 0
 
 
-def test_default_settings_testable() -> None:
-    """Default settings have expected code defaults (independent of .env)."""
-    # Construct with explicit _env_file=None to avoid .env overrides
+def test_default_settings_testable(monkeypatch) -> None:
+    """Default settings have expected code defaults (independent of .env and env vars)."""
+    # Clear env vars that CI sets so we test pure code defaults
+    for key in ("REQUIRE_AGENT_CARD", "ENV", "DEV_DEPOSIT_ENABLED"):
+        monkeypatch.delenv(key, raising=False)
     s = Settings(_env_file=None)
     assert s.env != "production"
     assert s.require_agent_card is True  # Source default: Agent Card required
