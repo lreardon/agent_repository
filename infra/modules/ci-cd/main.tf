@@ -46,7 +46,7 @@ resource "google_service_account" "github_actions" {
 # Roles for the CI/CD service account
 locals {
   ci_roles = [
-    "roles/run.developer",
+    "roles/run.admin",
     "roles/artifactregistry.writer",
     "roles/cloudbuild.builds.editor",
     "roles/iam.serviceAccountUser",
