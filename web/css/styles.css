@@ -2,7 +2,7 @@
    Arcoa — The Agent Marketplace
    ============================================ */
 
-/* ---- Fonts ---- */
+/* ---- Fonts & Theme ---- */
 :root {
     --bg: #F4EFE4;
     --bg-surface: #E8DFCC;
@@ -16,6 +16,14 @@
     --code-bg: #1C1610;
     --code-text: #DDD0B8;
     --code-inline-bg: #E4DCCC;
+    --success: #4A7A3A;
+    --error: #8B3A3A;
+    --logo-fill: #1a1612;
+    --logo-stroke: #c9a962;
+    --svg-agent-fill: #EDE5D4;
+    --svg-agent-stroke: #C8BBA8;
+    --svg-agent-text: #2A2118;
+    --svg-agent-sub: #5C4F3D;
 
     --font-display: 'Cormorant Garamond', Georgia, serif;
     --font-body: 'Source Serif 4', Georgia, serif;
@@ -24,6 +32,55 @@
     --radius: 6px;
     --max-prose: 860px;
     --max-wide: 1400px;
+}
+
+/* Dark mode */
+[data-theme="dark"] {
+    --bg: #141210;
+    --bg-surface: #1C1916;
+    --text: #D8CFBC;
+    --text-muted: #A89C88;
+    --text-heading: #E8E0D0;
+    --text-dim: #706858;
+    --accent: #6BA3CC;
+    --accent-ochre: #C8982E;
+    --border: #3A352C;
+    --code-bg: #0E0C0A;
+    --code-text: #DDD0B8;
+    --code-inline-bg: #2A2520;
+    --success: #6AAF58;
+    --error: #C05050;
+    --logo-fill: #141210;
+    --logo-stroke: #c9a962;
+    --svg-agent-fill: #2A2520;
+    --svg-agent-stroke: #3A352C;
+    --svg-agent-text: #E8E0D0;
+    --svg-agent-sub: #A89C88;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #141210;
+        --bg-surface: #1C1916;
+        --text: #D8CFBC;
+        --text-muted: #A89C88;
+        --text-heading: #E8E0D0;
+        --text-dim: #706858;
+        --accent: #6BA3CC;
+        --accent-ochre: #C8982E;
+        --border: #3A352C;
+        --code-bg: #0E0C0A;
+        --code-text: #DDD0B8;
+        --code-inline-bg: #2A2520;
+        --success: #6AAF58;
+        --error: #C05050;
+        --logo-fill: #141210;
+        --logo-stroke: #c9a962;
+        --svg-agent-fill: #2A2520;
+        --svg-agent-stroke: #3A352C;
+        --svg-agent-text: #E8E0D0;
+        --svg-agent-sub: #A89C88;
+    }
 }
 
 /* ---- Reset ---- */
@@ -236,7 +293,31 @@ ul li::before {
 }
 
 .theme-toggle {
-    display: none;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    transition: border-color 0.2s, color 0.2s;
+    margin-right: 0.5rem;
+}
+
+.theme-toggle:hover {
+    border-color: var(--accent-ochre);
+    color: var(--accent-ochre);
+}
+
+/* Show appropriate icon */
+.theme-toggle .theme-icon-sun { display: none; }
+.theme-toggle .theme-icon-moon { display: inline; }
+[data-theme="dark"] .theme-toggle .theme-icon-sun { display: inline; }
+[data-theme="dark"] .theme-toggle .theme-icon-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .theme-toggle .theme-icon-sun { display: inline; }
+    :root:not([data-theme="light"]) .theme-toggle .theme-icon-moon { display: none; }
 }
 
 .nav-toggle {
@@ -361,11 +442,11 @@ ul li::before {
 }
 
 .signup-status.success {
-    color: #4A7A3A;
+    color: var(--success);
 }
 
 .signup-status.error {
-    color: #8B3A3A;
+    color: var(--error);
 }
 
 .hero-shortcuts {
@@ -415,12 +496,12 @@ ul li::before {
 
 .btn-primary {
     background: var(--accent-ochre);
-    color: #F4EFE4;
+    color: var(--bg);
 }
 
 .btn-primary:hover {
     background: #8C6828;
-    color: #F4EFE4;
+    color: var(--bg);
 }
 
 .btn-secondary {
@@ -460,6 +541,16 @@ ul li::before {
     width: 100%;
     max-width: 780px;
     aspect-ratio: 360 / 420;
+}
+
+/* Invert hero diagram in dark mode */
+[data-theme="dark"] .hero-diagram-svg {
+    filter: invert(0.88) hue-rotate(180deg);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .hero-diagram-svg {
+        filter: invert(0.88) hue-rotate(180deg);
+    }
 }
 
 /* ---- Sections ---- */
@@ -518,6 +609,16 @@ ul li::before {
     width: 36px;
     height: 36px;
     margin-bottom: 0.75rem;
+}
+
+/* Adjust feature icon colors in dark mode */
+[data-theme="dark"] .feature-icon-svg {
+    filter: brightness(1.4);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .feature-icon-svg {
+        filter: brightness(1.4);
+    }
 }
 
 .feature-card h3 {
@@ -842,22 +943,22 @@ ul li::before {
 
 .method.get {
     background: var(--accent);
-    color: #F4EFE4;
+    color: var(--bg);
 }
 
 .method.post {
     background: var(--accent-ochre);
-    color: #F4EFE4;
+    color: var(--bg);
 }
 
 .method.patch {
-    background: #7A6E5C;
-    color: #F4EFE4;
+    background: var(--text-dim);
+    color: var(--bg);
 }
 
 .method.delete {
-    background: #7A6E5C;
-    color: #F4EFE4;
+    background: var(--text-dim);
+    color: var(--bg);
 }
 
 .auth-badge {
@@ -962,13 +1063,13 @@ ul li::before {
 }
 
 .state.success {
-    border-color: #4A7A3A;
-    color: #4A7A3A;
+    border-color: var(--success);
+    color: var(--success);
 }
 
 .state.error {
-    border-color: #8B3A3A;
-    color: #8B3A3A;
+    border-color: var(--error);
+    color: var(--error);
 }
 
 .state-diagram .arrow {
@@ -1236,23 +1337,23 @@ ul li::before {
     display: flex;
     gap: 0;
     margin-bottom: 2rem;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border);
 }
 .qs-tab {
     background: none;
     border: none;
-    color: #888;
-    font-family: 'IBM Plex Mono', monospace;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
     font-size: 0.9rem;
     padding: 0.75rem 1.5rem;
     cursor: pointer;
     border-bottom: 2px solid transparent;
     transition: color 0.2s, border-color 0.2s;
 }
-.qs-tab:hover { color: #e0e0e0; }
+.qs-tab:hover { color: var(--text); }
 .qs-tab.active {
-    color: #c9a962;
-    border-bottom-color: #c9a962;
+    color: var(--accent-ochre);
+    border-bottom-color: var(--accent-ochre);
 }
 .qs-panel { display: none; }
 .qs-panel.active { display: block; }

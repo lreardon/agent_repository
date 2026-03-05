@@ -1,6 +1,24 @@
 // Arcoa - The Agent Marketplace
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ---- Theme Toggle ----
+    const themeToggle = document.querySelector('.theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            let next;
+            if (current === 'dark' || (!current && prefersDark)) {
+                next = 'light';
+            } else {
+                next = 'dark';
+            }
+
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('arcoa-theme', next);
+        });
+    }
     // ---- Mobile Navigation Toggle ----
     const navToggle = document.querySelector('.nav-toggle');
     const navLinks = document.querySelector('.nav-links');
