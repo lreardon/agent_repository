@@ -112,14 +112,12 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          image: ${{ needs.build.outputs.image_sha }}
-          region: ${{ env.REGION }}
-          gcloud_component: beta
-        env:
-          CLOUDSDK_CORE_VERBOSITY: debug
+        run: |
+          gcloud run services update ${SERVICE} \
+            --image=${{ needs.build.outputs.image_sha }} \
+            --region=${REGION} \
+            --port=8000 \
+            --verbosity=debug
 
       - name: Verify deployment
         run: |
