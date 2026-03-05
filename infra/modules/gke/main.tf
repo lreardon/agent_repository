@@ -112,59 +112,46 @@ resource "google_service_account_iam_member" "api_impersonate_sandbox" {
 # Requires the kubernetes provider to be configured by the caller.
 # --------------------------------------------------------------------------
 
-# Sandbox namespace
-resource "kubernetes_namespace_v1" "sandbox" {
-  metadata {
-    name = "sandbox"
-    labels = {
-      "app.kubernetes.io/managed-by" = "terraform"
-      "purpose"                      = "verification-sandbox"
-    }
-  }
+# TEMPORARILY COMMENTED OUT — need fleet membership before k8s provider works
+# Uncomment after fleet membership is created and provider host is restored.
 
-  depends_on = [google_container_cluster.sandbox]
-}
+# resource "kubernetes_namespace_v1" "sandbox" {
+#   metadata {
+#     name = "sandbox"
+#     labels = {
+#       "app.kubernetes.io/managed-by" = "terraform"
+#       "purpose"                      = "verification-sandbox"
+#     }
+#   }
+#   depends_on = [google_container_cluster.sandbox]
+# }
 
-# Default-deny NetworkPolicy — block ALL ingress and egress in the sandbox namespace
-resource "kubernetes_network_policy_v1" "deny_all" {
-  metadata {
-    name      = "deny-all"
-    namespace = kubernetes_namespace_v1.sandbox.metadata[0].name
-  }
+# resource "kubernetes_network_policy_v1" "deny_all" {
+#   metadata {
+#     name      = "deny-all"
+#     namespace = kubernetes_namespace_v1.sandbox.metadata[0].name
+#   }
+#   spec {
+#     pod_selector {}
+#     policy_types = ["Ingress", "Egress"]
+#   }
+#   depends_on = [kubernetes_namespace_v1.sandbox]
+# }
 
-  spec {
-    # Select all pods in the namespace
-    pod_selector {}
-
-    # Deny all traffic directions
-    policy_types = ["Ingress", "Egress"]
-
-    # No ingress rules = deny all ingress
-    # No egress rules = deny all egress
-  }
-
-  depends_on = [kubernetes_namespace_v1.sandbox]
-}
-
-# --------------------------------------------------------------------------
-# Resource quota for the sandbox namespace
-# --------------------------------------------------------------------------
-resource "kubernetes_resource_quota_v1" "sandbox_quota" {
-  metadata {
-    name      = "sandbox-quota"
-    namespace = kubernetes_namespace_v1.sandbox.metadata[0].name
-  }
-
-  spec {
-    hard = {
-      "requests.cpu"    = "4"
-      "requests.memory" = "4Gi"
-      "pods"            = "20"
-    }
-  }
-
-  depends_on = [kubernetes_namespace_v1.sandbox]
-}
+# resource "kubernetes_resource_quota_v1" "sandbox_quota" {
+#   metadata {
+#     name      = "sandbox-quota"
+#     namespace = kubernetes_namespace_v1.sandbox.metadata[0].name
+#   }
+#   spec {
+#     hard = {
+#       "requests.cpu"    = "4"
+#       "requests.memory" = "4Gi"
+#       "pods"            = "20"
+#     }
+#   }
+#   depends_on = [kubernetes_namespace_v1.sandbox]
+# }
 
 # --------------------------------------------------------------------------
 # Outputs
