@@ -13,8 +13,7 @@ _CAPABILITY_PATTERN = re.compile(r"^[a-zA-Z0-9-]+$")
 class ListingCreate(BaseModel):
     skill_id: str = Field(..., min_length=1, max_length=64, description="Skill identifier (alphanumeric + hyphens)")
     description: str | None = Field(None, max_length=4096, description="Listing description")
-    price_model: str = Field(..., pattern=r"^(per_call|per_unit|per_hour|flat)$", description="Pricing model")
-    base_price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2, description="Base price in credits")
+    base_price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2, description="Price per job in credits")
     currency: str = Field("credits", max_length=16, description="Currency (default: credits)")
     sla: dict | None = Field(None, description="Service level agreement terms")
 
@@ -35,7 +34,6 @@ class ListingCreate(BaseModel):
 
 class ListingUpdate(BaseModel):
     description: str | None = Field(None, max_length=4096)
-    price_model: str | None = Field(None, pattern=r"^(per_call|per_unit|per_hour|flat)$")
     base_price: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
     sla: dict | None = None
     status: str | None = Field(None, pattern=r"^(active|paused|archived)$")
@@ -55,14 +53,13 @@ class ListingResponse(BaseModel):
     seller_agent_id: uuid.UUID
     skill_id: str
     description: str | None
-    price_model: str
     base_price: Decimal
     currency: str
     sla: dict | None
     status: str
     created_at: datetime
 
-    @field_validator("price_model", "status", mode="before")
+    @field_validator("status", mode="before")
     @classmethod
     def serialize_enum(cls, v: object) -> str:
         if hasattr(v, "value"):
@@ -75,7 +72,6 @@ class DiscoverQuery(BaseModel):
     skill_id: str | None = None
     min_rating: Decimal | None = Field(None, ge=0, le=5)
     max_price: Decimal | None = Field(None, gt=0)
-    price_model: str | None = Field(None, pattern=r"^(per_call|per_unit|per_hour|flat)$")
     limit: int = Field(20, ge=1, le=100)
     offset: int = Field(0, ge=0)
 
@@ -98,7 +94,6 @@ class DiscoverResult(BaseModel):
     seller_reputation: Decimal
     skill_id: str
     description: str | None
-    price_model: str
     base_price: Decimal
     currency: str
     sla: dict | None

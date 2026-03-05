@@ -28,7 +28,6 @@ def _listing_data(**overrides: object) -> dict:
     base = {
         "skill_id": "pdf-extraction",
         "description": "Extract data from PDFs",
-        "price_model": "per_unit",
         "base_price": "0.05",
     }
     base.update(overrides)
@@ -46,7 +45,6 @@ async def test_create_listing(client: AsyncClient) -> None:
     assert resp.status_code == 201
     body = resp.json()
     assert body["skill_id"] == "pdf-extraction"
-    assert body["price_model"] == "per_unit"
     assert body["seller_agent_id"] == agent_id
 
 
@@ -168,18 +166,7 @@ async def test_discover(client: AsyncClient) -> None:
     assert len(body["items"]) == 2
     assert body["total"] == 2
 
-    # Filter by price_model
-    resp = await client.get("/discover?price_model=per_unit")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body["items"]) == 3
-    assert body["total"] == 3
 
-    resp = await client.get("/discover?price_model=flat")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body["items"]) == 0
-    assert body["total"] == 0
 
 
 @pytest.mark.asyncio
@@ -319,22 +306,21 @@ async def test_discover_with_max_price_filter(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_discover_with_price_model_filter(client: AsyncClient) -> None:
-    """D3: Discover with price_model filter."""
+async def test_discover_no_price_model_filter(client: AsyncClient) -> None:
+    """D3: price_model filter removed — all pricing is per-job."""
     priv, pub = generate_keypair()
     resp = await client.post("/agents", json=make_agent_data(pub))
     agent_id = resp.json()["agent_id"]
 
-    data = _listing_data()
-    data["price_model"] = "per_hour"
-    data["skill_id"] = "hourly-skill"
+    data = _listing_data(skill_id="flat-skill")
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
     await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
 
-    resp = await client.get("/discover?price_model=per_hour")
+    # price_model param should be ignored (not cause an error)
+    resp = await client.get("/discover")
     assert resp.status_code == 200
     for r in resp.json()["items"]:
-        assert r["price_model"] == "per_hour"
+        assert "price_model" not in r
 
 
 @pytest.mark.asyncio
@@ -462,23 +448,21 @@ async def test_discover_pagination(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_discover_combined_filters(client: AsyncClient) -> None:
-    """D4: Discover with combined max_price + price_model."""
+    """D4: Discover with combined max_price filter."""
     priv, pub = generate_keypair()
     resp = await client.post("/agents", json=make_agent_data(pub))
     agent_id = resp.json()["agent_id"]
 
     data = _listing_data()
     data["base_price"] = "25.00"
-    data["price_model"] = "per_call"
     data["skill_id"] = "combo-filter"
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
     await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
 
-    resp = await client.get("/discover?max_price=50&price_model=per_call")
+    resp = await client.get("/discover?max_price=50")
     assert resp.status_code == 200
     for r in resp.json()["items"]:
         assert float(r["base_price"]) <= 50
-        assert r["price_model"] == "per_call"
 
 
 # ---------------------------------------------------------------------------

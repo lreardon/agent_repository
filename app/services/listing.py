@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent, AgentStatus
-from app.models.listing import Listing, ListingStatus, PriceModel
+from app.models.listing import Listing, ListingStatus
 from app.schemas.listing import ListingCreate, ListingUpdate
 from app.services.agent_card import get_skill_ids_from_card
 
@@ -37,7 +37,6 @@ async def create_listing(
         seller_agent_id=seller_agent_id,
         skill_id=data.skill_id,
         description=data.description,
-        price_model=PriceModel(data.price_model),
         base_price=data.base_price,
         currency=data.currency,
         sla=data.sla,
@@ -104,8 +103,6 @@ async def update_listing(
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        if field == "price_model" and value is not None:
-            value = PriceModel(value)
         if field == "status" and value is not None:
             value = ListingStatus(value)
         setattr(listing, field, value)
@@ -146,7 +143,6 @@ async def discover(
     skill_id: str | None = None,
     min_rating: Decimal | None = None,
     max_price: Decimal | None = None,
-    price_model: str | None = None,
     online: bool | None = None,
     limit: int = 20,
     offset: int = 0,
@@ -165,8 +161,6 @@ async def discover(
         base = base.where(Agent.reputation_seller >= min_rating)
     if max_price is not None:
         base = base.where(Listing.base_price <= max_price)
-    if price_model:
-        base = base.where(Listing.price_model == PriceModel(price_model))
     if online is not None:
         base = base.where(Agent.is_online == online)
 
@@ -209,7 +203,7 @@ async def discover(
             "seller_reputation": row.reputation_seller,
             "skill_id": row.Listing.skill_id,
             "description": row.Listing.description,
-            "price_model": row.Listing.price_model.value,
+
             "base_price": row.Listing.base_price,
             "currency": row.Listing.currency,
             "sla": row.Listing.sla,

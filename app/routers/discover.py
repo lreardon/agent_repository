@@ -24,7 +24,6 @@ async def discover(
     skill_id: str | None = Query(None),
     min_rating: Decimal | None = Query(None, ge=0, le=5),
     max_price: Decimal | None = Query(None, gt=0),
-    price_model: str | None = Query(None, pattern=r"^(per_call|per_unit|per_hour|flat)$"),
     online: bool | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -36,7 +35,7 @@ async def discover(
         skill_id=skill_id,
         min_rating=min_rating,
         max_price=max_price,
-        price_model=price_model,
+
         online=online,
         limit=limit,
         offset=offset,

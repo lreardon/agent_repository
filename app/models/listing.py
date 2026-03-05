@@ -12,13 +12,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
-class PriceModel(enum.Enum):
-    PER_CALL = "per_call"
-    PER_UNIT = "per_unit"
-    PER_HOUR = "per_hour"
-    FLAT = "flat"
-
-
 class ListingStatus(enum.Enum):
     ACTIVE = "active"
     PAUSED = "paused"
@@ -42,10 +35,6 @@ class Listing(Base):
     )
     skill_id: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    price_model: Mapped[PriceModel] = mapped_column(
-        Enum(PriceModel, values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
-    )
     base_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(16), nullable=False, default="credits")
     sla: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

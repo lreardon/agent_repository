@@ -1,5 +1,7 @@
 """Schema validation edge case tests (SV1-SV7)."""
 
+from decimal import Decimal
+
 import pytest
 from httpx import AsyncClient
 
@@ -18,20 +20,19 @@ async def test_agent_create_empty_display_name(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_listing_invalid_price_model(client: AsyncClient) -> None:
-    """SV3: Invalid price_model rejected."""
+async def test_listing_no_price_model_needed(client: AsyncClient) -> None:
+    """SV3: price_model removed — listings no longer require it."""
     priv, pub = generate_keypair()
     resp = await client.post("/agents", json=make_agent_data(pub))
     agent_id = resp.json()["agent_id"]
 
     data = {
         "skill_id": "test-skill",
-        "price_model": "invalid_model",
         "base_price": "10.00",
     }
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
     resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
-    assert resp.status_code == 422
+    assert resp.status_code == 201
 
 
 @pytest.mark.asyncio
@@ -194,7 +195,7 @@ async def test_listing_create_missing_fields(client: AsyncClient) -> None:
     resp = await client.post("/agents", json=make_agent_data(pub))
     agent_id = resp.json()["agent_id"]
 
-    data = {"price_model": "per_call", "base_price": "10.00"}
+    data = {"base_price": "10.00"}
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", data)
     resp = await client.post(f"/agents/{agent_id}/listings", json=data, headers=headers)
     assert resp.status_code == 422
@@ -406,11 +407,10 @@ def test_deliver_payload_list() -> None:
     assert len(dp.result) == 1
 
 
-def test_listing_create_valid_price_models() -> None:
+def test_listing_create_no_price_model() -> None:
     from app.schemas.listing import ListingCreate
-    for model in ["per_call", "per_unit", "per_hour", "flat"]:
-        lc = ListingCreate(skill_id="test-skill", price_model=model, base_price="10.00")
-        assert lc.price_model == model
+    lc = ListingCreate(skill_id="test-skill", base_price="10.00")
+    assert lc.base_price == Decimal("10.00")
 
 
 def test_agent_create_valid_schema() -> None:

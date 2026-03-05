@@ -43,7 +43,6 @@ async def _create_agent_with_listing(
     listing_data = {
         "skill_id": skill_id,
         "description": f"Listing for {skill_id}",
-        "price_model": "per_call",
         "base_price": "10.00",
     }
     headers = make_auth_headers(agent_id, priv, "POST", f"/agents/{agent_id}/listings", listing_data)

@@ -56,7 +56,6 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
     listing_data = {
         "skill_id": "pdf-parse",
         "description": "Extract structured JSON from PDF documents. $0.05/page.",
-        "price_model": "per_unit",
         "base_price": "0.05",
         "sla": {"max_latency_seconds": 3600, "uptime_pct": 99.5},
     }
