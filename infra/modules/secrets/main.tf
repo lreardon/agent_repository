@@ -126,6 +126,44 @@ resource "google_secret_manager_secret_iam_member" "treasury_wallet_key_access" 
 }
 
 # --------------------------------------------------------------------------
+# Admin API keys
+# --------------------------------------------------------------------------
+# Note: Secret value must be added manually via:
+#   echo -n "your-admin-key" | gcloud secrets versions add admin-api-keys-<env> --data-file=-
+resource "google_secret_manager_secret" "admin_api_keys" {
+  secret_id = "admin-api-keys-${var.environment}"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "admin_api_keys_access" {
+  secret_id = google_secret_manager_secret.admin_api_keys.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.cloud_run_service_account}"
+}
+
+# --------------------------------------------------------------------------
+# Admin path prefix (obfuscated admin endpoint path)
+# --------------------------------------------------------------------------
+# Note: Secret value must be added manually via:
+#   echo -n "/your-secret-prefix" | gcloud secrets versions add admin-path-prefix-<env> --data-file=-
+resource "google_secret_manager_secret" "admin_path_prefix" {
+  secret_id = "admin-path-prefix-${var.environment}"
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "admin_path_prefix_access" {
+  secret_id = google_secret_manager_secret.admin_path_prefix.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.cloud_run_service_account}"
+}
+
+# --------------------------------------------------------------------------
 # Outputs
 # --------------------------------------------------------------------------
 output "db_password_secret_id" {
@@ -138,4 +176,12 @@ output "signing_key_secret_id" {
 
 output "resend_api_key_secret_id" {
   value = google_secret_manager_secret.resend_api_key.secret_id
+}
+
+output "admin_api_keys_secret_id" {
+  value = google_secret_manager_secret.admin_api_keys.secret_id
+}
+
+output "admin_path_prefix_secret_id" {
+  value = google_secret_manager_secret.admin_path_prefix.secret_id
 }
