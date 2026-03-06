@@ -122,8 +122,8 @@ async def test_withdrawal_happy_path(client: AsyncClient) -> None:
     assert resp.status_code == 201
     body = resp.json()
     assert body["amount"] == "50.00"
-    assert body["fee"] == "0.50"
-    assert body["net_payout"] == "49.50"
+    assert body["fee"] == "0.00"
+    assert body["net_payout"] == "50.00"
     assert body["status"] == "pending"
     assert body["destination_address"] == VALID_ETH_ADDRESS
 
@@ -170,15 +170,13 @@ async def test_withdrawal_must_exceed_fee(client: AsyncClient) -> None:
     await _deposit(client, agent_id, priv, "100.00")
 
     path = f"/agents/{agent_id}/wallet/withdraw"
-    # $0.50 fee means requesting exactly $0.50 would yield $0.00 net
-    # But minimum is $1.00, so this is caught by min validation first
-    # Let's test with exactly $1.00 which should work (net = $0.50)
+    # With $0 fee, even small withdrawals work (net = amount)
     data = {"amount": "1.00", "destination_address": VALID_ETH_ADDRESS}
     headers = make_auth_headers(agent_id, priv, "POST", path, data)
     resp = await client.post(path, json=data, headers=headers)
 
     assert resp.status_code == 201
-    assert resp.json()["net_payout"] == "0.50"
+    assert resp.json()["net_payout"] == "1.00"
 
 
 @pytest.mark.asyncio
@@ -634,8 +632,8 @@ async def test_process_withdrawal_idempotent_with_existing_tx_hash(
         withdrawal_id=uuid.uuid4(),
         agent_id=uuid.UUID(agent_id),
         amount=Decimal("10.00"),
-        fee=Decimal("0.50"),
-        net_payout=Decimal("9.50"),
+        fee=Decimal("0.00"),
+        net_payout=Decimal("10.00"),
         destination_address=VALID_ETH_ADDRESS,
         status=WithdrawalStatus.PROCESSING,
         tx_hash="0x" + "ff" * 32,
@@ -724,8 +722,8 @@ async def _setup_fresh_withdrawal(client, db_session, amount="10.00"):
         withdrawal_id=uuid.uuid4(),
         agent_id=uuid.UUID(agent_id),
         amount=Decimal(amount),
-        fee=Decimal("0.50"),
-        net_payout=Decimal(amount) - Decimal("0.50"),
+        fee=Decimal("0.00"),
+        net_payout=Decimal(amount),
         destination_address=VALID_ETH_ADDRESS,
         status=WithdrawalStatus.PENDING,
     )
@@ -847,8 +845,8 @@ async def test_process_withdrawal_idempotent_failed_tx(
         withdrawal_id=uuid.uuid4(),
         agent_id=uuid.UUID(agent_id),
         amount=Decimal("10.00"),
-        fee=Decimal("0.50"),
-        net_payout=Decimal("9.50"),
+        fee=Decimal("0.00"),
+        net_payout=Decimal("10.00"),
         destination_address=VALID_ETH_ADDRESS,
         status=WithdrawalStatus.PROCESSING,
         tx_hash="0x" + "ee" * 32,

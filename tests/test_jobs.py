@@ -647,12 +647,11 @@ async def test_full_lifecycle_propose_to_complete(client: AsyncClient) -> None:
     assert resp.json()["result"]["output"] == "all done"
 
     # Verify seller got paid:
-    # Started with $10.00, paid $0.01 storage fee on deliver,
-    # received $99.50 from escrow ($100 - $0.50 seller base fee share)
-    # = $10.00 - $0.01 + $99.50 = $109.49
+    # Started with $10.00, no storage fee, received $100.00 (no base fee)
+    # = $10.00 + $100.00 = $110.00
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "109.49"
+    assert resp.json()["balance"] == "110.00"
 
 
 @pytest.mark.asyncio

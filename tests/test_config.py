@@ -36,9 +36,9 @@ def test_chain_id() -> None:
 def test_default_fee_schedule() -> None:
     s = Settings()
     assert s.fee_base_percent is not None
-    assert float(s.fee_base_percent) > 0
-    assert float(s.fee_verification_per_cpu_second) > 0
-    assert float(s.fee_storage_per_kb) > 0
+    assert float(s.fee_base_percent) >= 0
+    assert float(s.fee_verification_per_cpu_second) >= 0
+    assert float(s.fee_storage_per_kb) >= 0
 
 
 def test_default_settings_testable(monkeypatch) -> None:

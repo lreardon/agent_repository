@@ -58,8 +58,8 @@ async def _make_withdrawal(
         withdrawal_id=uuid.uuid4(),
         agent_id=agent_id,
         amount=Decimal("5.00"),
-        fee=Decimal("0.50"),
-        net_payout=Decimal("4.50"),
+        fee=Decimal("0.00"),
+        net_payout=Decimal("5.00"),
         destination_address="0x" + "bb" * 20,
         status=status,
     )

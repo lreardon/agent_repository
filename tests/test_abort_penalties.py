@@ -630,12 +630,9 @@ async def test_bond_returned_on_completion(client: AsyncClient) -> None:
     resp = await client.post(f"/jobs/{job_id}/complete", headers=headers)
     assert resp.status_code == 200
 
-    # Seller should have: 80 (remaining after bond) + escrow payout + bond back
-    # Escrow payout = 100 - 0.50 (0.5% seller base fee) = 99.50
-    # But seller also paid storage fee (~0.01) on delivery
-    # Bond (20) returned. Total: 80 + 99.50 + 20 - 0.01 = 199.49
+    # Seller should have: 80 (remaining after bond) + 100 (payout, no fee) + 20 (bond) = 200.00
     seller_bal = await _get_balance(client, seller_id, seller_priv)
-    assert seller_bal == Decimal("199.49")
+    assert seller_bal == Decimal("200.00")
 
 
 # ---------------------------------------------------------------------------

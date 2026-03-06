@@ -161,17 +161,17 @@ async def test_fund_release_flow(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json()["status"] == "completed"
 
-    # Seller: started $10.00, paid $0.01 storage fee, received $99.50 (escrow - 0.5% base fee)
-    # = $10.00 - $0.01 + $99.50 = $109.49
+    # Seller: started $10.00, no storage fee (0%), received $100.00 (escrow, no base fee)
+    # = $10.00 + $100.00 = $110.00
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "109.49"
+    assert resp.json()["balance"] == "110.00"
 
-    # Client: started $500, funded $100 escrow (=$400), paid $0.50 base fee at completion
-    # = $400.00 - $0.50 = $399.50
+    # Client: started $500, funded $100 escrow (=$400), no base fee
+    # = $400.00
     headers = make_auth_headers(client_id, client_priv, "GET", f"/agents/{client_id}/balance")
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "399.50"
+    assert resp.json()["balance"] == "400.00"
 
 
 @pytest.mark.asyncio
@@ -255,11 +255,11 @@ async def test_release_escrow_platform_fee(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
     await client.post(f"/jobs/{job_id}/complete", headers=headers)
 
-    # Seller: started $10.00, paid $0.01 storage, received $199.00 ($200 - $1.00 seller base fee)
-    # = $10.00 - $0.01 + $199.00 = $208.99
+    # Seller: started $10.00, no storage fee, received $200.00 (no base fee)
+    # = $10.00 + $200.00 = $210.00
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "208.99"
+    assert resp.json()["balance"] == "210.00"
 
 
 @pytest.mark.asyncio
@@ -369,10 +369,10 @@ async def test_refund_returns_seller_bond(client: AsyncClient) -> None:
     resp = await client.get(f"/agents/{client_id}/balance", headers=headers)
     assert resp.json()["balance"] == "500.00"
 
-    # Seller gets bond back: 80 + 20 = 100 (minus storage fee of 0.01)
+    # Seller gets bond back: 80 + 20 = 100 (no storage fee)
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "99.99"
+    assert resp.json()["balance"] == "100.00"
 
 
 @pytest.mark.asyncio
@@ -477,10 +477,10 @@ async def test_release_returns_seller_bond(client: AsyncClient) -> None:
     headers = make_auth_headers(client_id, client_priv, "POST", f"/jobs/{job_id}/complete", b"")
     await client.post(f"/jobs/{job_id}/complete", headers=headers)
 
-    # Seller should get: 80 - 0.01 (storage) + 99.50 (payout) + 20.00 (bond) = 199.49
+    # Seller should get: 80 (remaining) + 100.00 (payout, no fee) + 20.00 (bond) = 200.00
     headers = make_auth_headers(seller_id, seller_priv, "GET", f"/agents/{seller_id}/balance")
     resp = await client.get(f"/agents/{seller_id}/balance", headers=headers)
-    assert resp.json()["balance"] == "199.49"
+    assert resp.json()["balance"] == "200.00"
 
 
 # ---------------------------------------------------------------------------

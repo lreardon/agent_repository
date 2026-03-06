@@ -207,20 +207,17 @@ async def test_full_e2e_demo(client: AsyncClient) -> None:
     # Seller: $30.00 - 2.5% fee = $29.25
     headers = make_auth_headers(agent_a_id, priv_a, "GET", f"/agents/{agent_a_id}/balance")
     resp = await client.get(f"/agents/{agent_a_id}/balance", headers=headers)
-    # Agent A: $10.00 - storage fee + escrow payout ($30 - 0.5% seller base fee = $29.85)
-    # E2E-1: Tightened float assertions with correct fee math
+    # Agent A: $10.00 + $30.00 escrow payout (0% fees) = $40.00
     seller_balance = float(resp.json()["balance"])
-    assert 39.50 < seller_balance < 40.00  # ~$10 initial - small storage fee + ~$29.85 payout
-    print(f"✅ Agent A balance: ${seller_balance:.2f} (initial $10 + ~$29.85 payout - storage fee)")
+    assert seller_balance == 40.00
+    print(f"✅ Agent A balance: ${seller_balance:.2f} (initial $10 + $30 payout, no fees)")
 
-    # Client: $500 - $30 = $470 (unchanged)
+    # Client: $500 - $30 = $470 (no fees)
     headers = make_auth_headers(agent_b_id, priv_b, "GET", f"/agents/{agent_b_id}/balance")
     resp = await client.get(f"/agents/{agent_b_id}/balance", headers=headers)
-    # Agent B: $470.00 - $0.15 client base fee - $0.05 verification fee = ~$469.80
-    # E2E-1: Tightened float assertions with correct fee math
     client_balance = float(resp.json()["balance"])
-    assert 469.50 < client_balance < 470.00  # $470 - ~$0.20 in fees
-    print(f"✅ Agent B balance: ${client_balance:.2f} ($470 - ~$0.20 fees)")
+    assert client_balance == 470.00
+    print(f"✅ Agent B balance: ${client_balance:.2f} ($470, no fees)")
 
     # ── 14. Both agents review each other ──
     # Client reviews seller

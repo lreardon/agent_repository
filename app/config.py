@@ -14,18 +14,18 @@ class Settings(BaseSettings):
     # --- Fee schedule ---
     # Base marketplace fee: percentage of agreed price, split 50/50 between client and seller.
     # Charged at escrow release (completion).
-    fee_base_percent: Decimal = Decimal("0.01")  # 1% total (0.5% each)
+    fee_base_percent: Decimal = Decimal("0.00")  # 0% — free during launch
 
     # Verification compute fee: charged to the CLIENT when they trigger /verify.
     # Scales with CPU-seconds consumed by the verification sandbox.
     # Minimum fee for any verification run (applied when no criteria / zero CPU time).
-    fee_verification_per_cpu_second: Decimal = Decimal("0.01")  # $0.01/CPU-s
-    fee_verification_minimum: Decimal = Decimal("0.05")  # Floor for all verification runs
+    fee_verification_per_cpu_second: Decimal = Decimal("0.00")  # $0.00 — free during launch
+    fee_verification_minimum: Decimal = Decimal("0.00")  # $0.00 — free during launch
 
     # Deliverable storage fee: charged to the SELLER when they call /deliver.
     # Scales with the byte size of the JSON-serialized result.
-    fee_storage_per_kb: Decimal = Decimal("0.001")  # $0.001/KB
-    fee_storage_minimum: Decimal = Decimal("0.01")  # Floor for tiny deliverables
+    fee_storage_per_kb: Decimal = Decimal("0.000")  # $0.00 — free during launch
+    fee_storage_minimum: Decimal = Decimal("0.00")  # $0.00 — free during launch
 
     # Rate limiting defaults
     rate_limit_discovery_capacity: int = 60
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     min_deposit_amount: Decimal = Decimal("0.01")
     min_withdrawal_amount: Decimal = Decimal("0.01")
     max_withdrawal_amount: Decimal = Decimal("100000.00")
-    withdrawal_flat_fee: Decimal = Decimal("0.50")  # Covers L2 gas
+    withdrawal_flat_fee: Decimal = Decimal("0.00")  # $0.00 — free during launch
     deposit_confirmations_required: int = 12
 
     @property
