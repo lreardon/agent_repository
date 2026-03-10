@@ -59,7 +59,7 @@ def test_event_state_mapping_coverage() -> None:
     expected_events = {
         "job.proposed", "job.counter_received", "job.accepted", "job.funded",
         "job.started", "job.delivered", "job.completed", "job.failed",
-        "job.disputed", "job.resolved", "job.deadline_warning",
+        "job.disputed", "job.resolved", "job.deadline_warning", "job.cancelled",
     }
     assert expected_events == set(_EVENT_STATE_MAP.keys())
 

@@ -48,3 +48,5 @@ bin/
 
 sdk/
 .env.demo
+
+/jobs/

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#141210"/>
+  <rect x="1" y="1" width="1198" height="628" fill="none" stroke="#3A352C" stroke-width="2"/>
+
+  <!-- Logo mark — pre-computed at 3.5x scale, centered at x=600 -->
+  <!-- Original center (16,16) * 3.5 = 56, offset so center lands at (600, 236) → translate = (544, 180) -->
+  <circle cx="600" cy="236" r="49" fill="#1a1612" stroke="#c9a962" stroke-width="7"/>
+  <path d="M575.5 236C575.5 236 586 222 600 222C614 222 624.5 236 624.5 236C624.5 236 614 250 600 250C586 250 575.5 236 575.5 236Z" stroke="#c9a962" stroke-width="5.25" fill="none"/>
+  <circle cx="600" cy="236" r="7" fill="#c9a962"/>
+  <line x1="600" y1="194" x2="600" y2="204.5" stroke="#c9a962" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="600" y1="267.5" x2="600" y2="278" stroke="#c9a962" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="558" y1="236" x2="568.5" y2="236" stroke="#c9a962" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="631.5" y1="236" x2="642" y2="236" stroke="#c9a962" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- Brand name -->
+  <text x="600" y="420" text-anchor="middle" font-family="Georgia, serif" font-size="72" font-weight="700" fill="#E8E0D0">Arcoa</text>
+
+  <!-- Tagline -->
+  <text x="600" y="475" text-anchor="middle" font-family="Georgia, serif" font-size="28" fill="#A89C88">The Marketplace for AI Agents</text>
+
+  <!-- Accent line -->
+  <line x1="480" y1="505" x2="720" y2="505" stroke="#c9a962" stroke-width="1.5" opacity="0.5"/>
+</svg>

@@ -17,6 +17,7 @@ from app.schemas.errors import JOB_ERRORS, OWNER_ERRORS
 from app.services import escrow as escrow_service
 from app.services import job as job_service
 from app.services.test_runner import run_script_test
+from app.services.webhooks import notify_job_event
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -30,6 +31,7 @@ async def propose_job(
 ) -> JobResponse:
     """Client proposes a job."""
     job = await job_service.propose_job(db, auth.agent_id, data)
+    await notify_job_event(db, job.job_id, 'job.proposed', {'client_agent_id': str(job.client_agent_id)})
     return JobResponse.model_validate(job)
 
 
@@ -58,6 +60,7 @@ async def counter_job(
 ) -> JobResponse:
     """Either party submits a counter-proposal."""
     job = await job_service.counter_job(db, job_id, auth.agent_id, data)
+    await notify_job_event(db, job.job_id, 'job.counter_received', {'from_agent_id': str(auth.agent_id)})
     return JobResponse.model_validate(job)
 
 
@@ -71,6 +74,7 @@ async def accept_job(
 ) -> JobResponse:
     """Accept current terms. Seller must include acceptance_criteria_hash."""
     job = await job_service.accept_job(db, job_id, auth.agent_id, data)
+    await notify_job_event(db, job.job_id, 'job.accepted', {'accepted_by': str(auth.agent_id)})
     return JobResponse.model_validate(job)
 
 
@@ -83,6 +87,7 @@ async def fund_job(
 ) -> EscrowResponse:
     """Client funds escrow for an agreed job."""
     escrow = await escrow_service.fund_job(db, job_id, auth.agent_id)
+    await notify_job_event(db, job_id, 'job.funded', {'client_agent_id': str(auth.agent_id)})
     return EscrowResponse.model_validate(escrow)
 
 
@@ -110,6 +115,7 @@ async def complete_job(
         )
     escrow = await escrow_service.release_escrow(db, job_id)
     job = await job_service.get_job(db, job_id)
+    await notify_job_event(db, job.job_id, 'job.completed', {'seller_agent_id': str(job.seller_agent_id)})
     return JobResponse.model_validate(job)
 
 
@@ -122,6 +128,7 @@ async def start_job(
 ) -> JobResponse:
     """Seller begins work. Job must be funded."""
     job = await job_service.start_job(db, job_id, auth.agent_id)
+    await notify_job_event(db, job.job_id, 'job.started', {'seller_agent_id': str(job.seller_agent_id)})
     return JobResponse.model_validate(job)
 
 
@@ -142,6 +149,8 @@ async def deliver_job(
     # Charge storage fee after confirming the caller is the actual seller
     storage_fee = calculate_storage_fee(data.result)
     await charge_fee(db, auth.agent_id, storage_fee)
+
+    await notify_job_event(db, job.job_id, 'job.delivered', {'seller_agent_id': str(job.seller_agent_id)})
 
     return {
         **JobResponse.model_validate(job).model_dump(mode="json"),
@@ -220,6 +229,7 @@ async def verify_job(
         if suite_result.passed:
             escrow = await escrow_service.release_escrow(db, job_id)
             job = await job_service.get_job(db, job_id)
+            await notify_job_event(db, job.job_id, 'job.completed', {'seller_agent_id': str(job.seller_agent_id)})
         else:
             # Verification failed — seller is responsible for the compute cost.
             # Refund client's verification fee, charge seller instead.
@@ -241,6 +251,7 @@ async def verify_job(
             job.status = JobStatus.IN_PROGRESS
             await db.commit()
             await db.refresh(job)
+            await notify_job_event(db, job.job_id, 'job.failed', {'reason': 'verification_failed'})
 
         resp = VerifyResponse(
             job=JobResponse.model_validate(job),
@@ -275,6 +286,7 @@ async def fail_job(
             detail="This job has acceptance criteria. Use POST /jobs/{job_id}/verify to run verification.",
         )
     job = await job_service.fail_job(db, job_id, auth.agent_id)
+    await notify_job_event(db, job.job_id, 'job.failed', {'failed_by': str(auth.agent_id)})
     return JobResponse.model_validate(job)
 
 
@@ -304,6 +316,7 @@ async def abort_job(
 
     await escrow_service.abort_job(db, job_id, auth.agent_id)
     job = await job_service.get_job(db, job_id)
+    await notify_job_event(db, job.job_id, 'job.cancelled', {'aborted_by': str(auth.agent_id)})
     return JobResponse.model_validate(job)
 
 

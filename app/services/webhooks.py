@@ -72,6 +72,7 @@ _EVENT_STATE_MAP = {
     "job.disputed": "failed",
     "job.resolved": "completed",
     "job.deadline_warning": "working",
+    "job.cancelled": "failed",
 }
 
 

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import async_session_factory
 from app.models.agent import Agent, AgentStatus
 from app.redis import redis_pool
+from app.models.webhook import WebhookDelivery, WebhookStatus
 from app.services.connection_manager import manager
 from app.utils.crypto import is_timestamp_valid, verify_signature
 
@@ -24,6 +25,35 @@ router = APIRouter(tags=["websocket"])
 
 PING_INTERVAL = 30  # seconds
 PONG_TIMEOUT = 10  # seconds
+
+
+async def _flush_pending_webhooks(ws: WebSocket, db: AsyncSession, agent_id: uuid.UUID) -> None:
+    """Send all PENDING webhook deliveries for this agent, then mark as DELIVERED."""
+    result = await db.execute(
+        select(WebhookDelivery)
+        .where(
+            WebhookDelivery.target_agent_id == agent_id,
+            WebhookDelivery.status == WebhookStatus.PENDING,
+        )
+        .order_by(WebhookDelivery.created_at.asc())
+    )
+    deliveries = list(result.scalars().all())
+
+    for delivery in deliveries:
+        try:
+            await ws.send_json({
+                "type": "event",
+                "event_type": delivery.event_type,
+                "payload": delivery.payload,
+            })
+            delivery.status = WebhookStatus.DELIVERED
+        except Exception:
+            logger.warning("Failed to flush webhook %s to agent %s", delivery.delivery_id, agent_id)
+            break
+
+    if deliveries:
+        await db.commit()
+        logger.info("Flushed %d pending webhooks to agent %s", len(deliveries), agent_id)
 
 
 async def _authenticate(ws: WebSocket, db: AsyncSession, redis_client: aioredis.Redis) -> Agent | None:
@@ -118,6 +148,9 @@ async def ws_agent(ws: WebSocket) -> None:
             await manager.connect(agent_id, ws)
 
             await ws.send_json({"type": "auth_ok", "agent_id": str(agent_id)})
+
+            # Flush any pending webhook deliveries
+            await _flush_pending_webhooks(ws, db, agent_id)
 
             try:
                 while True:
