@@ -74,10 +74,18 @@ async def verify_request(
     if agent.status != AgentStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Agent is not active")
 
-    # Read body for signature verification
-    body = await request.body()
+    # Read body for signature verification.
+    # For multipart/form-data uploads the body stream may already be consumed
+    # by FastAPI's form-data parser, so we fall back to an empty body.
     method = request.method.upper()
     path = request.url.path
+    content_type = request.headers.get("content-type", "")
+
+    if "multipart/form-data" in content_type:
+        # Multipart: client signs with empty body (file content excluded from sig)
+        body = b""
+    else:
+        body = await request.body()
 
     # Verify signature
     if not verify_signature(agent.public_key, signature, timestamp, method, path, body):

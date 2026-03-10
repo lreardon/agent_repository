@@ -195,7 +195,7 @@ if settings.env not in ("development", "test"):
     app.add_middleware(ErrorReportingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
-app.add_middleware(BodySizeLimitMiddleware, max_bytes=1_048_576)
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=52_428_800)  # 50MB for hosting uploads
 
 # ---------------------------------------------------------------------------
 # API versioning: /v1 prefix with backward-compatible root mount

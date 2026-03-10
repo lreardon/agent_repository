@@ -18,12 +18,12 @@ async def test_security_headers_present(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_body_size_limit_exceeded(client: AsyncClient) -> None:
-    """M1: POST with Content-Length > 1MB is rejected with 413."""
-    # Send a request with a Content-Length header claiming a huge body
+    """M1: POST with Content-Length > 50MB is rejected with 413."""
+    # Send a request with a Content-Length header claiming a body over the 50MB limit
     resp = await client.post(
         "/agents",
         content=b"x",
-        headers={"Content-Length": "2000000", "Content-Type": "application/json"},
+        headers={"Content-Length": "60000000", "Content-Type": "application/json"},
     )
     assert resp.status_code == 413
 
@@ -72,7 +72,7 @@ async def test_body_size_limit_put_checked(client: AsyncClient) -> None:
     resp = await client.put(
         "/agents/00000000-0000-0000-0000-000000000000",
         content=b"x",
-        headers={"Content-Length": "2000000", "Content-Type": "application/json"},
+        headers={"Content-Length": "60000000", "Content-Type": "application/json"},
     )
     assert resp.status_code == 413
 
