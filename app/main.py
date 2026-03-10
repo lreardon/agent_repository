@@ -17,7 +17,7 @@ from app.database import get_db
 from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from app.logging_config import setup_logging, RequestContextMiddleware
 from app.redis import get_redis
-from app.routers import admin, agents, auth, dashboard, discover, fees, jobs, listings, reviews, wallet, webhooks, ws
+from app.routers import admin, agents, auth, dashboard, discover, fees, hosting, jobs, listings, reviews, wallet, webhooks, ws
 
 from app.config import settings as _settings
 setup_logging(_settings.env)
@@ -126,10 +126,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.deadline_queue import run_deadline_consumer
     from app.services.deposit_watcher import run_deposit_watcher
     from app.services.webhook_delivery import run_webhook_delivery_loop
+    from app.services.hosting.scaler import run_idle_monitor
     from app.config import settings
     deadline_task = asyncio.create_task(run_deadline_consumer())
     deposit_watcher_task = asyncio.create_task(run_deposit_watcher()) if settings.deposit_watcher_enabled else None
     webhook_delivery_task = asyncio.create_task(run_webhook_delivery_loop())
+    idle_monitor_task = asyncio.create_task(run_idle_monitor())
     await _recover_wallet_tasks()
     await _recover_deadlines()
 
@@ -150,11 +152,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.task_registry import registry
     await registry.shutdown(timeout=30)
 
+    idle_monitor_task.cancel()
     webhook_delivery_task.cancel()
     if deposit_watcher_task is not None:
         deposit_watcher_task.cancel()
     deadline_task.cancel()
-    for task in (deposit_watcher_task, deadline_task, webhook_delivery_task):
+    for task in (idle_monitor_task, deposit_watcher_task, deadline_task, webhook_delivery_task):
         if task is None:
             continue
         try:
@@ -210,6 +213,7 @@ _api_routers = [
     ws.router,
     dashboard.router,
     admin.router,
+    hosting.router,
 ]
 
 # Primary versioned routes (/v1/...)

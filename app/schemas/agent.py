@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _CAPABILITY_PATTERN = re.compile(r"^[a-zA-Z0-9-]+$")
-_VALID_HOSTING_MODES = {"external", "websocket", "client_only"}
+_VALID_HOSTING_MODES = {"external", "websocket", "client_only", "hosted"}
 
 # Private/internal IP ranges for SSRF protection
 _BLOCKED_NETWORKS = [

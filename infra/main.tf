@@ -239,6 +239,22 @@ resource "google_gke_hub_membership" "sandbox" {
 }
 
 # --------------------------------------------------------------------------
+# Hosted Agent Infrastructure
+# --------------------------------------------------------------------------
+module "hosting" {
+  source = "./modules/hosting"
+
+  project_id                = var.project_id
+  region                    = var.region
+  environment               = var.environment
+  gke_cluster_name          = module.gke.cluster_name
+  gke_cluster_location      = var.region
+  api_service_account_email = google_service_account.cloud_run_api.email
+
+  depends_on = [module.gke]
+}
+
+# --------------------------------------------------------------------------
 # Cloud Run
 # --------------------------------------------------------------------------
 module "cloud_run" {
@@ -263,6 +279,9 @@ module "cloud_run" {
   sandbox_gke_cluster      = module.gke.cluster_name
   sandbox_gke_location     = var.region
   sandbox_service_account  = module.gke.sandbox_service_account_email
+  hosting_gke_cluster      = module.gke.cluster_name
+  hosting_gke_location     = var.region
+  hosting_namespace         = "hosted-agents"
   treasury_wallet_address     = var.treasury_wallet_address
   blockchain_network          = var.blockchain_network
   admin_api_keys_secret_id    = var.admin_api_keys_secret_id
@@ -273,6 +292,7 @@ module "cloud_run" {
     module.redis,
     module.secrets,
     module.gke,
+    module.hosting,
     google_artifact_registry_repository.api,
   ]
 }

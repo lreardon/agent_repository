@@ -144,6 +144,14 @@ class Settings(BaseSettings):
     sandbox_namespace: str = "sandbox"
     sandbox_service_account: str = ""  # SA email for impersonation (Cloud Run → GKE)
 
+    # Agent Hosting
+    hosting_gke_cluster: str = ""  # GKE cluster for hosted agents (empty = local Docker)
+    hosting_gke_location: str = ""  # GKE cluster region
+    hosting_gke_project: str = ""  # Defaults to gcp_project_id if empty
+    hosting_namespace: str = "hosted-agents"  # K8s namespace for hosted agent pods
+    hosting_max_agents_per_account: int = 10  # Max hosted agents per account
+    hosting_free_tier_cpu_hours: int = 100  # Free CPU-hours per month
+
     # Test runner
     test_runner_timeout_per_test: int = 60
     test_runner_timeout_per_suite: int = 300

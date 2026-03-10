@@ -91,6 +91,16 @@ async def enqueue_webhook(
     """
     from app.services.connection_manager import manager
 
+    # If the target is a sleeping hosted agent, wake it first
+    if not manager.is_connected(target_agent_id):
+        try:
+            from app.services.hosting.scaler import is_hosted_and_sleeping, wake_agent
+            if await is_hosted_and_sleeping(db, target_agent_id):
+                logger.info("Waking sleeping hosted agent %s for event %s", target_agent_id, event_type)
+                await wake_agent(db, target_agent_id)
+        except Exception:
+            logger.exception("Failed to wake hosted agent %s", target_agent_id)
+
     # Try WebSocket delivery first
     ws_delivered = False
     if manager.is_connected(target_agent_id):

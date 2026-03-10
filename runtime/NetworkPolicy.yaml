@@ -1,0 +1,47 @@
+# NetworkPolicy for hosted agent pods.
+#
+# Allows egress to the internet (so agents can call external APIs)
+# but blocks access to:
+# - Other hosted agent pods (cross-agent isolation)
+# - Internal cluster services (GKE metadata, kube-dns internal)
+# - The Arcoa API internal endpoints (agents use public API only)
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hosted-agent-isolation
+  namespace: hosted-agents
+spec:
+  podSelector:
+    matchLabels:
+      arcoa-role: hosted-agent
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress: []  # No inbound traffic — agents connect outbound via WebSocket
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow egress to public internet (external APIs, Arcoa public API)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8       # GKE internal
+              - 172.16.0.0/12    # Private range
+              - 192.168.0.0/16   # Private range
+              - 169.254.0.0/16   # Link-local / metadata
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

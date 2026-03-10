@@ -114,6 +114,24 @@ variable "admin_path_prefix_secret_id" {
   default     = ""
 }
 
+variable "hosting_gke_cluster" {
+  description = "GKE cluster name for hosted agents (same cluster as sandbox)"
+  type        = string
+  default     = ""
+}
+
+variable "hosting_gke_location" {
+  description = "GKE cluster location for hosted agents"
+  type        = string
+  default     = ""
+}
+
+variable "hosting_namespace" {
+  description = "Kubernetes namespace for hosted agent pods"
+  type        = string
+  default     = "hosted-agents"
+}
+
 # --------------------------------------------------------------------------
 # Cloud Run service
 # --------------------------------------------------------------------------
@@ -213,6 +231,22 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "SANDBOX_SERVICE_ACCOUNT"
         value = var.sandbox_service_account
+      }
+
+      # --- Hosted agent infrastructure ---
+      env {
+        name  = "HOSTING_GKE_CLUSTER"
+        value = var.hosting_gke_cluster
+      }
+
+      env {
+        name  = "HOSTING_GKE_LOCATION"
+        value = var.hosting_gke_location
+      }
+
+      env {
+        name  = "HOSTING_NAMESPACE"
+        value = var.hosting_namespace
       }
 
       # --- Secrets mounted as env vars ---

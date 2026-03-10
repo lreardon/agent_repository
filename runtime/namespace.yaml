@@ -1,0 +1,10 @@
+# Kubernetes namespace for hosted agents.
+# Separate from the sandbox namespace (used for verification)
+# to enforce different security policies.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hosted-agents
+  labels:
+    app: arcoa
+    purpose: hosted-agents
