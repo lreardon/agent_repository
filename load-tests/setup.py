@@ -221,7 +221,6 @@ def create_listing(client: httpx.Client, agent: dict) -> str:
     body = json.dumps({
         "skill_id": "load-test",
         "description": "Load test service",
-        "price_model": "flat",
         "base_price": "1.00",
         "currency": "credits",
     }).encode()

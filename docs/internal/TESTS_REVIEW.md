@@ -89,7 +89,7 @@ All 161 tests pass when using the project's virtual environment (`.direnv/python
 |---|-----------|----------|
 | D1 | Discover with `min_rating` filter | MED |
 | D2 | Discover with `max_price` filter | MED |
-| D3 | Discover with `price_model` filter | MED |
+| D3 | ~~Discover with `price_model` filter~~ (removed — all pricing is per-job) | — |
 | D4 | Discover with combined filters | MED |
 | D5 | Discover with pagination (offset/limit) | MED |
 | D6 | Discover returns results sorted by reputation desc, then price asc | HIGH |
@@ -206,7 +206,7 @@ All 161 tests pass when using the project's virtual environment (`.direnv/python
 |---|-----------|----------|
 | SV1 | `AgentCreate` — public_key > 128 chars rejected | LOW |
 | SV2 | `AgentCreate` — empty display_name rejected | LOW |
-| SV3 | `ListingCreate` — invalid price_model string rejected | LOW |
+| SV3 | ~~`ListingCreate` — invalid price_model string rejected~~ (removed — all pricing is per-job) | — |
 | SV4 | `WithdrawalCreateRequest` — amount with too many decimal places | LOW |
 | SV5 | `ReviewCreate` — rating=0 rejected, rating=6 rejected | MED |
 | SV6 | `CounterProposal` — message > 2048 chars rejected | LOW |

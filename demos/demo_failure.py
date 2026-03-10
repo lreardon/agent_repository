@@ -304,7 +304,6 @@ def main() -> None:
     data = expect(alice.post(f"/agents/{alice.agent_id}/listings", {
         "skill_id": "pdf-extraction",
         "description": "Extract structured JSON from PDF documents.",
-        "price_model": "per_unit",
         "base_price": LISTING_PRICE,
         "sla": {"max_latency_seconds": 3600, "uptime_pct": 99.5},
     }), 201, "Alice listing")

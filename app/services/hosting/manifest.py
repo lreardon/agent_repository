@@ -6,14 +6,12 @@ from dataclasses import dataclass, field
 _SKILL_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]{0,63}$")
 _SECRET_REF_PATTERN = re.compile(r"^\$\{secrets\.([A-Z_][A-Z0-9_]*)\}$")
 _VALID_RUNTIMES = {"python:3.13", "python:3.12", "node:20", "node:22"}
-_VALID_PRICE_MODELS = {"per_unit", "flat", "per_hour"}
 
 
 @dataclass
 class SkillDef:
     id: str
     description: str
-    price_model: str = "per_unit"
     base_price: str = "0.01"
 
 
@@ -70,16 +68,11 @@ def parse_manifest(data: dict) -> AgentManifest:
         if not desc:
             raise ValueError(f"skills[{i}].description is required")
 
-        price_model = s.get("price_model", "per_unit")
-        if price_model not in _VALID_PRICE_MODELS:
-            raise ValueError(f"skills[{i}].price_model must be one of: {', '.join(_VALID_PRICE_MODELS)}")
-
         base_price = str(s.get("base_price", "0.01"))
 
         skills.append(SkillDef(
             id=skill_id,
             description=desc,
-            price_model=price_model,
             base_price=base_price,
         ))
 

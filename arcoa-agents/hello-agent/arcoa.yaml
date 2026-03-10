@@ -4,7 +4,6 @@ runtime: python:3.13
 skills:
   - id: hello-world
     description: "Returns a friendly 'Hello world.' greeting."
-    price_model: per_unit
     base_price: "0.00"
 
 cpu: "0.25"

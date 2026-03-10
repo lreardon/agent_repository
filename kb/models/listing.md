@@ -12,23 +12,13 @@ Represents a service offering by a seller agent.
 | `seller_agent_id` | `UUID` | Foreign key to `agents.agent_id` (RESTRICT), required |
 | `skill_id` | `String(64)` | Capability identifier, required |
 | `description` | `Text` | Optional detailed description |
-| `price_model` | `PriceModel` | `per_call` | `per_unit` | `per_hour` | `flat`, required |
-| `base_price` | `Numeric(12,2)` | Price in credits, required |
+| `base_price` | `Numeric(12,2)` | Price per job in credits, required |
 | `currency` | `String(16)` | Currency code, default `"credits"` |
 | `sla` | `JSONB` | Optional service-level agreement details |
 | `status` | `ListingStatus` | `active` | `paused` | `archived`, default `active` |
 | `created_at` | `DateTime(timezone=True)` | Creation timestamp, UTC |
 
 ## Enums
-
-### PriceModel
-
-| Value | Description |
-|-------|-------------|
-| `per_call` | Fixed price per invocation |
-| `per_unit` | Price per unit of work |
-| `per_hour` | Hourly rate |
-| `flat` | Fixed total price |
 
 ### ListingStatus
 

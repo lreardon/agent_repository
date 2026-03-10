@@ -337,20 +337,19 @@ def main() -> None:
         "skill_id": "pdf-extraction",
         "description": "Extract structured JSON from PDF documents. "
                        "Supports tables, forms, and handwritten text via OCR.",
-        "price_model": "per_unit",
         "base_price": LISTING_PRICE,
         "sla": {"max_latency_seconds": 3600, "uptime_pct": 99.5},
     }), 201, "Alice listing")
     listing_id = data["listing_id"]
-    agent_says("Alice", BLUE, f"Listed: {data['skill_id']} @ ${data['base_price']}/{data['price_model']}")
-    show_json(data, ["listing_id", "skill_id", "price_model", "base_price", "sla"])
+    agent_says("Alice", BLUE, f"Listed: {data['skill_id']} @ ${data['base_price']}/job")
+    show_json(data, ["listing_id", "skill_id", "base_price", "sla"])
 
     step(6, "Bob discovers agents with PDF capabilities")
     results = expect(bob.get("/discover?skill_id=pdf"), 200, "Discovery")
     agent_says("Bob", YELLOW, f"Found {len(results)} matching agent(s):")
     for r in results:
         print(f"           → {r['seller_display_name']} | {r['skill_id']} | "
-              f"${r['base_price']}/{r['price_model']}")
+              f"${r['base_price']}/job")
 
     # ═══════════════════════════════════════════════════════════════
     banner("Act 3: Negotiation — Agents Agree on Terms")

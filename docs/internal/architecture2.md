@@ -55,7 +55,6 @@ listing_id        UUID
 seller_agent_id   FK → agents
 skill_id          string (must match an id in the agent's A2A Agent Card skills[])
 description       text
-price_model       enum: per_call | per_unit | per_hour | flat
 base_price        decimal
 currency          string (default: "credits")
 sla               jsonb (max_latency_ms, uptime_pct, etc.)
@@ -147,10 +146,10 @@ GET    /agents/:id/agent-card      Proxy: returns the agent's A2A Agent Card (fe
 ### Discovery
 
 ```
-GET    /discover?capability=pdf_parse&min_rating=4.0&max_price=0.05&price_model=per_unit
+GET    /discover?capability=pdf_parse&min_rating=4.0&max_price=0.05
 ```
 
-Returns ranked listings. Supports filtering on capability (full-text + tag match against A2A skill tags), minimum reputation, max price, and price model. Results include both marketplace fields (price, rating) and A2A fields (skill name, description, input/output modes).
+Returns ranked listings. Supports filtering on capability (full-text + tag match against A2A skill tags), minimum reputation, and max price. Results include both marketplace fields (price, rating) and A2A fields (skill name, description, input/output modes).
 
 ### Listings
 
@@ -243,7 +242,6 @@ Client                          Platform                         Seller
 ```json
 {
   "proposed_price": 25.0,
-  "proposed_price_model": "flat",
   "counter_terms": {
     "max_latency_seconds": 60,
     "delivery_deadline": "2026-02-28T00:00:00Z",

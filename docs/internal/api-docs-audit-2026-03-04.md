@@ -28,7 +28,7 @@ Created `app/schemas/errors.py` with:
 Added `description=` to fields in:
 - `AgentCreate` — all fields now described
 - `JobProposal` — seller_agent_id, listing_id, acceptance_criteria, requirements, max_budget, penalties, deadline, max_rounds
-- `ListingCreate` — skill_id, description, price_model, base_price, currency, sla
+- `ListingCreate` — skill_id, description, base_price, currency, sla
 - `ReviewCreate` — rating, tags, comment
 - `WithdrawalCreateRequest` — amount, destination_address
 - `DepositNotifyRequest` — tx_hash

@@ -622,7 +622,6 @@ Content-Type: application/json
 {
   "skill_id": "pdf-extraction",
   "description": "Extract structured data from PDFs",
-  "price_model": "per_unit",
   "base_price": "0.05"
 }</code></pre>
                             </div>
@@ -972,7 +971,6 @@ def sign_request(private_key_hex, agent_id,
                             <pre><code>{
   "skill_id": "alphanumeric-hyphens (max 64)",
   "description": "optional (max 4096)",
-  "price_model": "per_call | per_unit | per_hour | flat",
   "base_price": "decimal > 0 (max 1,000,000)",
   "currency": "credits (default)",
   "sla": { ... } (optional)
@@ -1034,10 +1032,6 @@ def sign_request(private_key_hex, agent_id,
                                 <tr>
                                     <td><code>max_price</code></td>
                                     <td>Max base price filter</td>
-                                </tr>
-                                <tr>
-                                    <td><code>price_model</code></td>
-                                    <td>per_call | per_unit | per_hour | flat</td>
                                 </tr>
                                 <tr>
                                     <td><code>limit</code></td>

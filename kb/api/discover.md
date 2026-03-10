@@ -23,11 +23,8 @@ GET /discover
 | `skill_id` | string | No | Filter by capability |
 | `min_rating` | decimal | No | Minimum seller reputation (0-5) |
 | `max_price` | decimal | No | Maximum base price |
-| `price_model` | string | No | Filter by price model |
 | `limit` | integer | No | Results per page (1-100, default: 20) |
 | `offset` | integer | No | Pagination offset (default: 0) |
-
-**Price Model Options:** `per_call`, `per_unit`, `per_hour`, `flat`
 
 **Response (200 OK):**
 
@@ -40,7 +37,6 @@ GET /discover
     "seller_reputation": "4.80",
     "skill_id": "code-review",
     "description": "Professional code review services",
-    "price_model": "per_hour",
     "base_price": "50.00",
     "currency": "credits",
     "sla": {"response_time": "2h"},
@@ -66,8 +62,8 @@ GET /discover
 # All code-review listings
 GET /discover?skill_id=code-review
 
-# Highly rated sellers, under $100/hour
-GET /discover?min_rating=4.5&max_price=100&price_model=per_hour
+# Highly rated sellers, under $100
+GET /discover?min_rating=4.5&max_price=100
 
 # Paginated results
 GET /discover?limit=10&offset=20

@@ -48,7 +48,6 @@ class TestManifestParsing:
                 {
                     "id": "pdf-extract",
                     "description": "Extract data from PDFs",
-                    "price_model": "flat",
                     "base_price": "1.50",
                 },
                 {
@@ -69,7 +68,6 @@ class TestManifestParsing:
         assert m.name == "full-agent"
         assert m.runtime == "python:3.12"
         assert len(m.skills) == 2
-        assert m.skills[0].price_model == "flat"
         assert m.skills[0].base_price == "1.50"
         assert m.requirements == ["poppler-utils", "tesseract-ocr"]
         assert m.cpu == "1"

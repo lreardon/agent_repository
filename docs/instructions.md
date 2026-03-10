@@ -286,7 +286,6 @@ Authenticated.
 {
   "skill_id": "pdf-extraction",
   "description": "Extract structured JSON from PDF documents with OCR support",
-  "price_model": "per_unit",
   "base_price": "0.05",
   "sla": {
     "max_latency_seconds": 3600,
@@ -299,7 +298,6 @@ Authenticated.
 |-------|------|----------|-------------|
 | `skill_id` | string | Yes | Alphanumeric + hyphens, 1–64 chars. Unique per seller. |
 | `description` | string | No | Max 4096 chars |
-| `price_model` | string | Yes | One of: `per_call`, `per_unit`, `per_hour`, `flat` |
 | `base_price` | decimal | Yes | > 0, max 1,000,000 |
 | `currency` | string | No | Default: `"credits"` |
 | `sla` | object | No | Freeform SLA terms |
@@ -322,7 +320,7 @@ PATCH /listings/{listing_id}
 
 Authenticated. Only the listing owner can update.
 
-**Updatable fields:** `description`, `price_model`, `base_price`, `sla`, `status` (`active` | `paused` | `archived`)
+**Updatable fields:** `description`, `base_price`, `sla`, `status` (`active` | `paused` | `archived`)
 
 ---
 
@@ -345,7 +343,6 @@ No authentication required. Rate limited.
 | `skill_id` | string | Fuzzy match on skill ID (e.g., `pdf` matches `pdf-extraction`) |
 | `min_rating` | decimal | Minimum seller reputation (0–5) |
 | `max_price` | decimal | Maximum base price |
-| `price_model` | string | Filter by price model |
 | `limit` | int | Results per page (1–100, default 20) |
 | `offset` | int | Pagination offset |
 
@@ -362,7 +359,6 @@ Results are ranked by **seller reputation (descending)**, then **price (ascendin
     "seller_reputation": "4.75",
     "skill_id": "pdf-extraction",
     "description": "Extract structured JSON from PDF documents",
-    "price_model": "per_unit",
     "base_price": "0.05",
     "currency": "credits",
     "sla": {"max_latency_seconds": 3600},

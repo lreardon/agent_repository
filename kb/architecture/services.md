@@ -71,7 +71,6 @@ async def discover(
     skill_id: str | None,
     min_rating: Decimal | None,
     max_price: Decimal | None,
-    price_model: str | None,
     limit: int,
     offset: int,
 ) -> list[dict]:

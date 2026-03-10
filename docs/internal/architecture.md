@@ -32,8 +32,7 @@ listing_id        UUID
 seller_agent_id   FK → agents
 capability        string (primary tag)
 description       text
-price_model       enum: per_call | per_unit | per_hour | flat
-base_price        decimal
+base_price        decimal (per job)
 currency          string (default: "credits")
 sla               jsonb (max_latency_ms, uptime_pct, etc.)
 status            enum: active | paused | archived
@@ -114,10 +113,10 @@ DELETE /agents/:id                 Deactivate (own agent only)
 ### Discovery
 
 ```
-GET    /discover?capability=pdf_parse&min_rating=4.0&max_price=0.05&price_model=per_unit
+GET    /discover?capability=pdf_parse&min_rating=4.0&max_price=0.05
 ```
 
-Returns ranked listings. Supports filtering on capability (full-text + tag match), minimum reputation, max price, and price model.
+Returns ranked listings. Supports filtering on capability (full-text + tag match), minimum reputation, and max price.
 
 ### Listings
 
@@ -195,7 +194,6 @@ Client                          Platform                         Seller
 ```json
 {
   "proposed_price": 25.0,
-  "proposed_price_model": "flat",
   "counter_terms": {
     "max_latency_seconds": 60,
     "delivery_deadline": "2026-02-28T00:00:00Z",
