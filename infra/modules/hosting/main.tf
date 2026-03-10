@@ -51,73 +51,78 @@ resource "google_artifact_registry_repository" "hosted_agents" {
 }
 
 # ---------------------------------------------------------------------------
-# GKE Namespace + NetworkPolicy (applied via kubectl)
+# GKE Namespace + NetworkPolicy (native Terraform kubernetes resources)
 # ---------------------------------------------------------------------------
 
-# We use null_resource + kubectl because Terraform's kubernetes provider
-# requires cluster credentials at plan time, which complicates CI.
+resource "kubernetes_namespace" "hosted_agents" {
+  metadata {
+    name = "hosted-agents"
+    labels = {
+      app     = "arcoa"
+      purpose = "hosted-agents"
+    }
+  }
+}
 
-resource "null_resource" "hosted_agents_namespace" {
-  triggers = {
-    namespace = "hosted-agents"
+resource "kubernetes_network_policy" "hosted_agent_isolation" {
+  metadata {
+    name      = "hosted-agent-isolation"
+    namespace = kubernetes_namespace.hosted_agents.metadata[0].name
   }
 
-  provisioner "local-exec" {
-    command = <<-EOT
-      gcloud container clusters get-credentials ${var.gke_cluster_name} \
-        --region ${var.gke_cluster_location} \
-        --project ${var.project_id}
+  spec {
+    pod_selector {
+      match_labels = {
+        "arcoa-role" = "hosted-agent"
+      }
+    }
 
-      kubectl apply -f - <<EOF
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: hosted-agents
-        labels:
-          app: arcoa
-          purpose: hosted-agents
-      EOF
+    policy_types = ["Ingress", "Egress"]
 
-      kubectl apply -f - <<EOF
-      apiVersion: networking.k8s.io/v1
-      kind: NetworkPolicy
-      metadata:
-        name: hosted-agent-isolation
-        namespace: hosted-agents
-      spec:
-        podSelector:
-          matchLabels:
-            arcoa-role: hosted-agent
-        policyTypes:
-          - Egress
-          - Ingress
-        ingress: []
-        egress:
-          - to:
-              - namespaceSelector: {}
-                podSelector:
-                  matchLabels:
-                    k8s-app: kube-dns
-            ports:
-              - protocol: UDP
-                port: 53
-              - protocol: TCP
-                port: 53
-          - to:
-              - ipBlock:
-                  cidr: 0.0.0.0/0
-                  except:
-                    - 10.0.0.0/8
-                    - 172.16.0.0/12
-                    - 192.168.0.0/16
-                    - 169.254.0.0/16
-            ports:
-              - protocol: TCP
-                port: 443
-              - protocol: TCP
-                port: 80
-      EOF
-    EOT
+    # No ingress block = deny all inbound (Ingress is in policy_types)
+
+    # Allow DNS
+    egress {
+      to {
+        namespace_selector {}
+        pod_selector {
+          match_labels = {
+            "k8s-app" = "kube-dns"
+          }
+        }
+      }
+      ports {
+        protocol = "UDP"
+        port     = "53"
+      }
+      ports {
+        protocol = "TCP"
+        port     = "53"
+      }
+    }
+
+    # Allow outbound HTTPS/HTTP to public internet only
+    egress {
+      to {
+        ip_block {
+          cidr = "0.0.0.0/0"
+          except = [
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "169.254.0.0/16",
+          ]
+        }
+      }
+      ports {
+        protocol = "TCP"
+        port     = "443"
+      }
+      ports {
+        protocol = "TCP"
+        port     = "80"
+      }
+    }
   }
 }
 
@@ -138,20 +143,18 @@ resource "google_project_iam_member" "api_gke_developer" {
   member  = "serviceAccount:${var.api_service_account_email}"
 }
 
-# Allow the API to push images to the hosted agents registry
-resource "google_artifact_registry_repository_iam_member" "api_push" {
-  repository = google_artifact_registry_repository.hosted_agents.name
-  location   = var.region
-  role       = "roles/artifactregistry.writer"
-  member     = "serviceAccount:${var.api_service_account_email}"
+# Allow the API to push images to the hosted agents registry (project-level)
+resource "google_project_iam_member" "api_ar_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${var.api_service_account_email}"
 }
 
-# Allow GKE to pull images from the hosted agents registry
-resource "google_artifact_registry_repository_iam_member" "gke_pull" {
-  repository = google_artifact_registry_repository.hosted_agents.name
-  location   = var.region
-  role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.hosted_agent_runner.email}"
+# Allow GKE runner SA to pull images (project-level)
+resource "google_project_iam_member" "runner_ar_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.hosted_agent_runner.email}"
 }
 
 # ---------------------------------------------------------------------------
