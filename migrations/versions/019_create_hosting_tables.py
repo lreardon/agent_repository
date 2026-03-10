@@ -1,7 +1,7 @@
 """Create hosted_agents, agent_secrets, and hosting_usage tables.
 
-Revision ID: 006
-Revises: 005
+Revision ID: 019
+Revises: 018
 Create Date: 2026-03-10
 """
 from typing import Sequence, Union
@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision: str = "006"
-down_revision: Union[str, None] = "005"
+revision: str = "019"
+down_revision: Union[str, None] = "018"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
