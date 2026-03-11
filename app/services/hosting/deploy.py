@@ -557,14 +557,15 @@ async def _build_and_deploy_gke(
     manifest: AgentManifest,
     db: AsyncSession,
 ) -> str:
-    """Build image via Cloud Build, deploy as GKE Deployment."""
+    """Build image via Cloud Build API, deploy as GKE Deployment."""
     import tempfile
     from pathlib import Path
 
     project = settings.hosting_gke_project or settings.gcp_project_id
     region = hosted.region
+    # Use the hosted-agents Artifact Registry repo
     image_tag = (
-        f"{region}-docker.pkg.dev/{project}/agent-registry/"
+        f"{region}-docker.pkg.dev/{project}/hosted-agents-staging/"
         f"hosted-{str(agent_id)[:8]}:{hosted.source_hash[:12]}"
     )
     deployment_name = f"agent-{str(agent_id)[:8]}"
@@ -589,23 +590,23 @@ async def _build_and_deploy_gke(
         hosted.build_log = (hosted.build_log or "") + f"Building image: {image_tag}\n"
         await db.commit()
 
-        # Build with Cloud Build
-        proc = await asyncio.create_subprocess_exec(
-            "gcloud", "builds", "submit",
-            "--tag", image_tag,
-            "--project", project,
-            "--region", region,
-            "--quiet",
-            str(code_dir),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        stdout, _ = await proc.communicate()
-        build_output = stdout.decode("utf-8", errors="replace")
-        hosted.build_log = (hosted.build_log or "") + build_output + "\n"
+        # Create a tar.gz of the build context for Cloud Build
+        source_buf = io.BytesIO()
+        with tarfile.open(fileobj=source_buf, mode="w:gz") as tar_out:
+            for fpath in code_dir.rglob("*"):
+                if fpath.is_file():
+                    tar_out.add(str(fpath), arcname=str(fpath.relative_to(code_dir)))
+        source_bytes = source_buf.getvalue()
 
-        if proc.returncode != 0:
-            raise RuntimeError("Cloud Build failed")
+        # Upload source to GCS
+        source_object = await _upload_build_source(project, source_bytes, agent_id, hosted.source_hash)
+
+        hosted.build_log = (hosted.build_log or "") + f"Source uploaded, starting Cloud Build...\n"
+        await db.commit()
+
+        # Run Cloud Build via API
+        build_log = await _run_cloud_build(project, region, source_object, image_tag)
+        hosted.build_log = (hosted.build_log or "") + build_log + "\n"
 
     # Deploy to GKE
     hosted.build_log = (hosted.build_log or "") + "Deploying to GKE...\n"
@@ -634,6 +635,81 @@ async def _build_and_deploy_gke(
     )
 
     return deployment_id
+
+
+async def _upload_build_source(
+    project: str,
+    source_bytes: bytes,
+    agent_id: uuid.UUID,
+    source_hash: str,
+) -> dict:
+    """Upload build source to GCS and return {bucket, object} dict."""
+    from google.cloud import storage
+
+    bucket_name = f"{project}_cloudbuild"
+    object_name = f"hosted-agents/{agent_id}/{source_hash}.tar.gz"
+
+    def _upload():
+        client = storage.Client(project=project)
+        bucket = client.bucket(bucket_name)
+        # Create bucket if it doesn't exist
+        if not bucket.exists():
+            bucket.create(location="us-west1")
+        blob = bucket.blob(object_name)
+        blob.upload_from_string(source_bytes, content_type="application/gzip")
+        return {"bucket": bucket_name, "object": object_name}
+
+    return await asyncio.get_event_loop().run_in_executor(None, _upload)
+
+
+async def _run_cloud_build(
+    project: str,
+    region: str,
+    source_object: dict,
+    image_tag: str,
+) -> str:
+    """Run Cloud Build via the API and wait for completion."""
+    from google.cloud.devtools import cloudbuild_v1
+
+    def _build():
+        client = cloudbuild_v1.CloudBuildClient()
+
+        build = cloudbuild_v1.Build(
+            source=cloudbuild_v1.Source(
+                storage_source=cloudbuild_v1.StorageSource(
+                    bucket=source_object["bucket"],
+                    object_=source_object["object"],
+                ),
+            ),
+            images=[image_tag],
+            steps=[
+                cloudbuild_v1.BuildStep(
+                    name="gcr.io/cloud-builders/docker",
+                    args=["build", "-t", image_tag, "."],
+                ),
+            ],
+        )
+
+        operation = client.create_build(project_id=project, build=build)
+        # Wait for build to complete (blocking)
+        result = operation.result(timeout=600)
+
+        log_lines = []
+        if result.status == cloudbuild_v1.Build.Status.SUCCESS:
+            log_lines.append(f"Cloud Build succeeded (id={result.id})")
+        else:
+            status_name = cloudbuild_v1.Build.Status(result.status).name
+            log_lines.append(f"Cloud Build {status_name} (id={result.id})")
+            if result.status_detail:
+                log_lines.append(f"Detail: {result.status_detail}")
+            if result.status != cloudbuild_v1.Build.Status.SUCCESS:
+                raise RuntimeError(
+                    f"Cloud Build failed: {status_name} — {result.status_detail or 'no details'}"
+                )
+
+        return "\n".join(log_lines)
+
+    return await asyncio.get_event_loop().run_in_executor(None, _build)
 
 
 async def _apply_gke_deployment(

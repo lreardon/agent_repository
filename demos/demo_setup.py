@@ -64,8 +64,9 @@ def main() -> None:
         if row:
             agent_id = row[0]
             print(f"  {DIM}Cleaning up existing agent {str(agent_id)[:8]}...{RESET}")
-            # Null out the account's agent_id first to avoid FK issues
+            # Null out the account's agent_id first, then clean up related tables
             cur.execute("UPDATE accounts SET agent_id = NULL WHERE email = %s", (email,))
+            cur.execute("DELETE FROM hosted_agents WHERE agent_id = %s", (agent_id,))
             cur.execute("DELETE FROM agents WHERE agent_id = %s", (agent_id,))
 
         # Clean up old verifications
