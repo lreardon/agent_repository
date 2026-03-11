@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir .
 
 COPY . .
 
-RUN chmod -R a+r migrations/ \
+RUN chmod -R a+rX . \
     && chmod +x docker-entrypoint.sh \
     && groupadd -r appuser && useradd -r -g appuser appuser
 USER appuser
