@@ -206,10 +206,10 @@ async def _wait_for_online(
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         await asyncio.sleep(2)
+        db.expire_all()  # Force fresh read (sync method on AsyncSession)
         result = await db.execute(
             select(Agent.is_online).where(Agent.agent_id == agent_id)
         )
-        await db.expire_all()  # Force fresh read
         is_online = result.scalar_one_or_none()
         if is_online:
             return

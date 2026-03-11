@@ -491,6 +491,11 @@ async def _build_and_deploy_docker(
         )
         agent_obj = agent_row.scalar_one()
 
+        # Inject signing key from agent_secrets if available
+        private_key_env = []
+        if "ARCOA_PRIVATE_KEY" in decrypted_secrets:
+            private_key_env = ["-e", f"ARCOA_PRIVATE_KEY={decrypted_secrets['ARCOA_PRIVATE_KEY']}"]
+
         # Run container
         docker_cmd = [
             "docker", "run", "-d",
@@ -500,6 +505,7 @@ async def _build_and_deploy_docker(
             "--restart=on-failure:3",
             "-e", f"ARCOA_AGENT_ID={agent_id}",
             "-e", f"ARCOA_API_URL={settings.base_url}",
+            *private_key_env,
             *env_args,
             image_tag,
         ]
@@ -625,6 +631,10 @@ async def _build_and_deploy_gke(
 
     env_vars["ARCOA_AGENT_ID"] = str(agent_id)
     env_vars["ARCOA_API_URL"] = settings.base_url
+
+    # Inject signing key if stored as agent secret
+    if "ARCOA_PRIVATE_KEY" not in env_vars and "ARCOA_PRIVATE_KEY" in decrypted_secrets:
+        env_vars["ARCOA_PRIVATE_KEY"] = decrypted_secrets["ARCOA_PRIVATE_KEY"]
 
     deployment_id = await _apply_gke_deployment(
         deployment_name=deployment_name,
