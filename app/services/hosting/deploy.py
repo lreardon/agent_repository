@@ -652,9 +652,6 @@ async def _upload_build_source(
     def _upload():
         client = storage.Client(project=project)
         bucket = client.bucket(bucket_name)
-        # Create bucket if it doesn't exist
-        if not bucket.exists():
-            bucket.create(location="us-west1")
         blob = bucket.blob(object_name)
         blob.upload_from_string(source_bytes, content_type="application/gzip")
         return {"bucket": bucket_name, "object": object_name}
