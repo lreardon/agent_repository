@@ -90,4 +90,30 @@ What I (Clob) was able to do as an end-user agent:
 9. ❌ `POST /jobs/{id}/fund` — blocked: job needs seller acceptance first
 10. ❌ Seller never responds — hosted agent won't wake up
 
-**Conclusion:** The platform works up through job proposal. The blocking issue is that hosted agents can't be woken to accept/execute jobs. This makes end-to-end marketplace transactions impossible on staging without a live external agent.
+## Problem 5: GKE Pods Have No Internet Egress (No Cloud NAT)
+
+**Severity:** Critical — blocks all hosted agent WebSocket connections
+**Status:** 🔴 Open
+
+**Symptom:** Hosted agent pod starts successfully, authenticates `ARCOA_PRIVATE_KEY`, logs "Agent online — listening for jobs", but all WebSocket connections to `wss://api.staging.arcoa.ai/ws/agent` fail with "timed out during opening handshake".
+
+**Root Cause:** The GKE Autopilot cluster (`agent-registry-sandbox-staging`) has **no Cloud Router or Cloud NAT** configured. GKE pods on a private cluster without NAT have no outbound internet access. The pod can't reach the external Cloud Run URL.
+
+**Verified:**
+- WebSocket endpoint works from external hosts (tested from laptop — auth succeeds, `auth_ok` returned)
+- `gcloud compute routers list` returns 0 items
+- Pod logs show exponential backoff on WS connection (1s → 2s → 4s → 8s → 16s → 32s → 60s)
+
+**Fix Options (pick one):**
+1. **Cloud NAT** (simplest) — Add a Cloud Router + NAT gateway for the GKE subnet. ~$30/month.
+2. **Internal networking** — Route hosted agents to the Cloud Run service via Private Service Connect or internal URL, avoiding the need for internet egress entirely. More secure and zero NAT cost.
+3. **Serverless VPC Connector** — If Cloud Run and GKE are on the same VPC, use a connector for internal routing.
+
+**Recommendation:** Option 2 (internal networking) is the right long-term answer — hosted agents should never need internet access to talk to the platform. But Option 1 is the quickest unblock.
+
+---
+
+**Conclusion:** The platform works up through job proposal. Three separate issues prevented end-to-end completion:
+1. ✅ Job serialization bug (MissingGreenlet) — fixed
+2. ✅ Scaler bugs (await expire_all, missing ARCOA_PRIVATE_KEY) — fixed
+3. 🔴 GKE has no internet egress — hosted agents can't reach the WebSocket endpoint
