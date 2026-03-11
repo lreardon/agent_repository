@@ -68,6 +68,9 @@ async def wake_agent(db: AsyncSession, agent_id: uuid.UUID) -> bool:
     # Scale up the container
     try:
         if settings.hosting_gke_cluster:
+            # Re-apply deployment with current secrets (e.g., ARCOA_PRIVATE_KEY)
+            # before scaling up, so the pod gets the latest env vars.
+            await _refresh_gke_deployment_env(db, hosted, agent_id)
             await _scale_gke_deployment(hosted, replicas=1)
         else:
             await _start_docker_container(hosted, agent_id)
@@ -139,6 +142,89 @@ async def is_hosted_and_sleeping(db: AsyncSession, agent_id: uuid.UUID) -> bool:
     )
     row = result.scalar_one_or_none()
     return row == DeploymentStatus.SLEEPING
+
+
+# ==========================================================================
+# Env refresh — update GKE deployment env vars before wake
+# ==========================================================================
+
+async def _refresh_gke_deployment_env(
+    db: AsyncSession,
+    hosted: HostedAgent,
+    agent_id: uuid.UUID,
+) -> None:
+    """Patch the GKE deployment's container env vars with current secrets.
+
+    When secrets are added after initial deploy (e.g., ARCOA_PRIVATE_KEY),
+    the running deployment spec is stale. This patches env vars before
+    scaling up so the pod starts with the latest configuration.
+    """
+    from kubernetes import client as k8s_client
+    from app.services.hosting.secrets import get_all_decrypted
+    from app.services.hosting.manifest import parse_manifest
+
+    namespace = settings.hosting_namespace
+    deployment_name = hosted.container_id
+    if not deployment_name:
+        logger.warning("No deployment name for agent %s, skipping env refresh", agent_id)
+        return
+
+    try:
+        # Get current secrets
+        decrypted_secrets = await get_all_decrypted(db, agent_id)
+        manifest = parse_manifest(hosted.manifest)
+
+        # Build env vars (same logic as deploy.py)
+        env_vars = {}
+        for k, v in manifest.env.items():
+            if v.startswith("${secrets.") and v.endswith("}"):
+                secret_name = v[len("${secrets."):-1]
+                env_vars[k] = decrypted_secrets.get(secret_name, "")
+            else:
+                env_vars[k] = v
+
+        env_vars["ARCOA_AGENT_ID"] = str(agent_id)
+        env_vars["ARCOA_API_URL"] = settings.base_url
+
+        if "ARCOA_PRIVATE_KEY" not in env_vars and "ARCOA_PRIVATE_KEY" in decrypted_secrets:
+            env_vars["ARCOA_PRIVATE_KEY"] = decrypted_secrets["ARCOA_PRIVATE_KEY"]
+
+        env_list = [
+            k8s_client.V1EnvVar(name=k, value=v)
+            for k, v in env_vars.items()
+        ]
+
+        # Patch the deployment's container env
+        from app.services.hosting.deploy import _get_hosting_k8s_clients
+
+        batch_api, _ = await asyncio.get_event_loop().run_in_executor(
+            None, _get_hosting_k8s_clients,
+        )
+        apps_api = k8s_client.AppsV1Api(batch_api.api_client)
+
+        patch_body = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [{
+                            "name": "agent",
+                            "env": [{"name": e.name, "value": e.value} for e in env_list],
+                        }],
+                    },
+                },
+            },
+        }
+
+        await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: apps_api.patch_namespaced_deployment(
+                deployment_name, namespace, patch_body,
+            ),
+        )
+        logger.info("Refreshed env vars for deployment %s (%d vars)", deployment_name, len(env_list))
+
+    except Exception:
+        logger.exception("Failed to refresh env for agent %s — will try wake anyway", agent_id)
 
 
 # ==========================================================================
