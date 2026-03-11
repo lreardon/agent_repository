@@ -32,6 +32,7 @@ async def propose_job(
     """Client proposes a job."""
     job = await job_service.propose_job(db, auth.agent_id, data)
     await notify_job_event(db, job.job_id, 'job.proposed', {'client_agent_id': str(job.client_agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
@@ -61,6 +62,7 @@ async def counter_job(
     """Either party submits a counter-proposal."""
     job = await job_service.counter_job(db, job_id, auth.agent_id, data)
     await notify_job_event(db, job.job_id, 'job.counter_received', {'from_agent_id': str(auth.agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
@@ -75,6 +77,7 @@ async def accept_job(
     """Accept current terms. Seller must include acceptance_criteria_hash."""
     job = await job_service.accept_job(db, job_id, auth.agent_id, data)
     await notify_job_event(db, job.job_id, 'job.accepted', {'accepted_by': str(auth.agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
@@ -88,6 +91,7 @@ async def fund_job(
     """Client funds escrow for an agreed job."""
     escrow = await escrow_service.fund_job(db, job_id, auth.agent_id)
     await notify_job_event(db, job_id, 'job.funded', {'client_agent_id': str(auth.agent_id)})
+    await db.refresh(escrow)
     return EscrowResponse.model_validate(escrow)
 
 
@@ -116,6 +120,7 @@ async def complete_job(
     escrow = await escrow_service.release_escrow(db, job_id)
     job = await job_service.get_job(db, job_id)
     await notify_job_event(db, job.job_id, 'job.completed', {'seller_agent_id': str(job.seller_agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
@@ -129,6 +134,7 @@ async def start_job(
     """Seller begins work. Job must be funded."""
     job = await job_service.start_job(db, job_id, auth.agent_id)
     await notify_job_event(db, job.job_id, 'job.started', {'seller_agent_id': str(job.seller_agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
@@ -151,6 +157,7 @@ async def deliver_job(
     await charge_fee(db, auth.agent_id, storage_fee)
 
     await notify_job_event(db, job.job_id, 'job.delivered', {'seller_agent_id': str(job.seller_agent_id)})
+    await db.refresh(job)
 
     return {
         **JobResponse.model_validate(job).model_dump(mode="json"),
@@ -230,6 +237,7 @@ async def verify_job(
             escrow = await escrow_service.release_escrow(db, job_id)
             job = await job_service.get_job(db, job_id)
             await notify_job_event(db, job.job_id, 'job.completed', {'seller_agent_id': str(job.seller_agent_id)})
+            await db.refresh(job)
         else:
             # Verification failed — seller is responsible for the compute cost.
             # Refund client's verification fee, charge seller instead.
@@ -252,6 +260,7 @@ async def verify_job(
             await db.commit()
             await db.refresh(job)
             await notify_job_event(db, job.job_id, 'job.failed', {'reason': 'verification_failed'})
+            await db.refresh(job)
 
         resp = VerifyResponse(
             job=JobResponse.model_validate(job),
@@ -287,6 +296,7 @@ async def fail_job(
         )
     job = await job_service.fail_job(db, job_id, auth.agent_id)
     await notify_job_event(db, job.job_id, 'job.failed', {'failed_by': str(auth.agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
@@ -317,6 +327,7 @@ async def abort_job(
     await escrow_service.abort_job(db, job_id, auth.agent_id)
     job = await job_service.get_job(db, job_id)
     await notify_job_event(db, job.job_id, 'job.cancelled', {'aborted_by': str(auth.agent_id)})
+    await db.refresh(job)
     return JobResponse.model_validate(job)
 
 
